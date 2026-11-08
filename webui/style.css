@@ -1,0 +1,803 @@
+/* 造境 AI 设计智能体 · 控制台样式（Phase 66 材质层重写）
+   路线：夜航玻璃拟态 × 苹果界面法则。零构建、零外链、同端口挂载——
+   全部材质由本地 CSS 与内联 data URI 提供，运行期不发生任何网络取址。
+
+   材质三则
+   1) 玻璃只上壳层与浮层：侧栏、卡片、徽章是材质面；
+   2) 数据面保持实底高对比：表格、代码、输入、条码画布是读数面，可读性优先于材质；
+   3) 每层玻璃都带方向性光：外投影给深度，内顶高光给厚度，内底暗缘给重量。
+      单一扁平阴影、直角、纯色实心背板在本文件里不出现。
+
+   动效两则
+   1) 进入与切换走 500ms 弹性缓出曲线，可被打断、不锁输入；
+   2) 按下反馈是唯一的短时长档（150ms ease-out）——反馈必须发生在交互进行之中，而不是结束时。
+
+   token 契约（不得漂移）：--accent 由验收断言点名在场；--ok / --err 被 JS 内联样式实时消费。
+   主题机制：:root 即默认档「玄夜」，html[data-theme=…] 覆写语义变量。 */
+
+/* ==================================================================
+   1 · 不变量（与主题无关的时间曲线、圆角档、字体栈）
+   ================================================================== */
+:root {
+  /* 曲线：弹性缓出，前 30% 走完大部分行程，尾段收敛——Apple 的「物体停住」而非「淡掉」 */
+  --ease-spring: cubic-bezier(.16, 1, .3, 1);
+  --ease-out: cubic-bezier(.22, .61, .36, 1);
+
+  /* 时长：四档，除按下档外一律不低于 200ms */
+  --t-enter: 500ms;   /* 面板/卡片入场 */
+  --t-move: 420ms;    /* 位移、宽度、缩放 */
+  --t-color: 240ms;   /* 颜色、边框、透明度 */
+  --t-act: 150ms;     /* 按下即时反馈（Apple 明确规定的例外档） */
+
+  /* 圆角：24 / 16 / 10 / 全圆 四档，无直角 */
+  --r-l: 24px;
+  --r-m: 16px;
+  --r-s: 10px;
+  --r-pill: 999px;
+
+  /* 字体：一律用平台自带字面（系统字面已内建光学尺寸与字距表） */
+  --font-ui: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  /* 模糊：厚 / 中两档，均不低于 20px（低模糊会让玻璃读作脏而不是读作厚） */
+  --blur-thick: 44px;
+  --blur-card: 30px;
+  --sat: 1.75;
+}
+
+/* ==================================================================
+   2 · 主题 token（语义变量；每档都必须给全下面这组名字）
+   ================================================================== */
+html[data-theme="night"],
+:root {                          /* 玄夜 · 默认档：深墨底 + 香槟金单强调 */
+  color-scheme: dark;
+  --bg: #0b1322;
+  --bg2: #101a2c;
+  --text: #e6ecf7;
+  --muted: #9aa7bd;
+
+  --accent: #e4b863;             /* 全场唯一强调色 */
+  --accent-fg: #e4b863;          /* 文字用强调：实测最坏底上 ≥4.5（大片填充仍走 --accent） */
+  --accent-ink: #221a06;         /* 强调面上的墨色（深墨压金，比白压金更稳） */
+  --accent-soft: rgba(228, 184, 99, .18);
+  --ring: rgba(228, 184, 99, .28);
+  --sel: rgba(228, 184, 99, .30);
+
+  --ok: #48c98a;   --ok-bg: rgba(72, 201, 138, .14); --ok-fg: #48c98a;
+  --warn: #e3ac4a; --warn-bg: rgba(227, 172, 74, .14); --warn-fg: #f0cf94;
+  --err: #e7666a;  --err-bg: rgba(231, 102, 106, .14); --err-fg: #f7b6b8;
+
+  /* 玻璃：一律白基半透明（着色玻璃会被读成贴纸而不是材质） */
+  --glass: rgba(255, 255, 255, .062);
+  --glass-hi: rgba(255, 255, 255, .10);
+  --chrome: rgba(12, 19, 33, .58);
+  --line: rgba(255, 255, 255, .14);
+  --edge: rgba(255, 255, 255, .15);
+  --edge-hi: rgba(255, 255, 255, .30);
+  --gloss-top: rgba(255, 255, 255, .16);
+  --gloss-bot: rgba(0, 0, 0, .32);
+  --dot-ring: rgba(0, 0, 0, .42);
+  --scroll: rgba(255, 255, 255, .16);
+
+  /* 数据面：高对比近实底 */
+  --panel-solid: #131c2e;
+  --input-bg: #141e31;
+  --pre-bg: #0a1120;
+
+  /* 舞台光：三枚大半径光源（暖金 / 冷钢 / 深洋面），玻璃之所以成立的前提 */
+  --stage-a: rgba(228, 184, 99, .17);
+  --stage-b: rgba(88, 138, 208, .15);
+  --stage-c: rgba(38, 116, 126, .13);
+  --grain-o: .030;
+
+  --shadow-card: 0 14px 34px -14px rgba(2, 6, 14, .66);
+  --shadow-press: 0 3px 8px -3px rgba(2, 6, 14, .60);
+  --elev-1: 0 1px 1px rgba(2, 6, 14, .38), 0 14px 34px -14px rgba(2, 6, 14, .66),
+            inset 0 1px 0 var(--gloss-top), inset 0 -1px 0 var(--gloss-bot);
+  --elev-2: 0 30px 70px -26px rgba(2, 6, 14, .82), inset -1px 0 0 var(--gloss-bot),
+            inset 1px 0 0 var(--gloss-top);
+  --elev-3: 0 1px 1px rgba(2, 6, 14, .40), 0 6px 16px -6px rgba(2, 6, 14, .55),
+            inset 0 1px 0 rgba(255, 255, 255, .26);
+}
+
+html[data-theme="mist"] {        /* 雾白 · 冷调浅色玻璃 */
+  color-scheme: light;
+  --bg: #e9eef6;
+  --bg2: #f4f7fc;
+  --text: #152032;
+  --muted: #4b566a;
+
+  --accent: #8a5a12;
+  --accent-fg: #8a5a12;
+  --accent-ink: #fdf6e8;
+  --accent-soft: rgba(138, 90, 18, .12);
+  --ring: rgba(138, 90, 18, .26);
+  --sel: rgba(228, 184, 99, .34);
+
+  --ok: #17864b;   --ok-bg: rgba(23, 134, 75, .12); --ok-fg: #126b3c;
+  --warn: #9a6708; --warn-bg: rgba(154, 103, 8, .13); --warn-fg: #6f4a05;
+  --err: #c3353b;  --err-bg: rgba(195, 53, 59, .10);  --err-fg: #9a262b;
+
+  --glass: rgba(255, 255, 255, .60);
+  --glass-hi: rgba(255, 255, 255, .74);
+  --chrome: rgba(255, 255, 255, .66);
+  --line: rgba(21, 32, 50, .13);
+  --edge: rgba(21, 32, 50, .12);
+  --edge-hi: rgba(21, 32, 50, .28);
+  --gloss-top: rgba(255, 255, 255, .92);
+  --gloss-bot: rgba(21, 32, 50, .07);
+  --dot-ring: rgba(21, 32, 50, .22);
+  --scroll: rgba(21, 32, 50, .20);
+
+  --panel-solid: #ffffff;
+  --input-bg: rgba(255, 255, 255, .86);
+  --pre-bg: #f1f5fb;
+
+  --stage-a: rgba(228, 184, 99, .40);
+  --stage-b: rgba(120, 168, 232, .38);
+  --stage-c: rgba(96, 200, 176, .28);
+  --grain-o: .016;
+
+  --shadow-card: 0 14px 30px -14px rgba(24, 38, 62, .26);
+  --shadow-press: 0 3px 8px -3px rgba(24, 38, 62, .22);
+  --elev-1: 0 1px 1px rgba(24, 38, 62, .08), 0 14px 30px -14px rgba(24, 38, 62, .26),
+            inset 0 1px 0 var(--gloss-top), inset 0 -1px 0 var(--gloss-bot);
+  --elev-2: 0 24px 56px -24px rgba(24, 38, 62, .30), inset -1px 0 0 var(--gloss-bot),
+            inset 1px 0 0 var(--gloss-top);
+  --elev-3: 0 1px 1px rgba(24, 38, 62, .10), 0 6px 14px -6px rgba(24, 38, 62, .22),
+            inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+
+html[data-theme="celadon"] {     /* 青瓷 · 冷青墨绿深变体 */
+  color-scheme: dark;
+  --bg: #081715;
+  --bg2: #0e211e;
+  --text: #d9ece5;
+  --muted: #96b7ac;
+
+  --accent: #57d3ae;
+  --accent-fg: #57d3ae;
+  --accent-ink: #04231c;
+  --accent-soft: rgba(87, 211, 174, .16);
+  --ring: rgba(87, 211, 174, .28);
+  --sel: rgba(87, 211, 174, .28);
+
+  --ok: #4ecb93;   --ok-bg: rgba(78, 203, 147, .13); --ok-fg: #4ecb93;
+  --warn: #d8a845; --warn-bg: rgba(216, 168, 69, .13); --warn-fg: #e6c684;
+  --err: #ee6f6f;  --err-bg: rgba(238, 111, 111, .12); --err-fg: #f7b3b3;
+
+  --glass: rgba(236, 255, 250, .058);
+  --glass-hi: rgba(236, 255, 250, .10);
+  --chrome: rgba(8, 24, 22, .58);
+  --line: rgba(214, 246, 236, .13);
+  --edge: rgba(220, 250, 242, .15);
+  --edge-hi: rgba(220, 250, 242, .32);
+  --gloss-top: rgba(226, 255, 246, .15);
+  --gloss-bot: rgba(0, 12, 9, .34);
+  --dot-ring: rgba(0, 12, 9, .44);
+  --scroll: rgba(214, 246, 236, .16);
+
+  --panel-solid: #102421;
+  --input-bg: #0d201d;
+  --pre-bg: #061311;
+
+  --stage-a: rgba(87, 211, 174, .18);
+  --stage-b: rgba(216, 168, 69, .12);
+  --stage-c: rgba(58, 132, 158, .14);
+  --grain-o: .028;
+
+  --shadow-card: 0 14px 34px -14px rgba(0, 10, 8, .66);
+  --shadow-press: 0 3px 8px -3px rgba(0, 10, 8, .60);
+  --elev-1: 0 1px 1px rgba(0, 10, 8, .38), 0 14px 34px -14px rgba(0, 10, 8, .66),
+            inset 0 1px 0 var(--gloss-top), inset 0 -1px 0 var(--gloss-bot);
+  --elev-2: 0 30px 70px -26px rgba(0, 10, 8, .82), inset -1px 0 0 var(--gloss-bot),
+            inset 1px 0 0 var(--gloss-top);
+  --elev-3: 0 1px 1px rgba(0, 10, 8, .40), 0 6px 16px -6px rgba(0, 10, 8, .55),
+            inset 0 1px 0 rgba(226, 255, 246, .22);
+}
+
+html[data-theme="amber"] {       /* 琥珀 · 暖纸浅色变体 */
+  color-scheme: light;
+  --bg: #f2ead9;
+  --bg2: #f9f4e9;
+  --text: #2e2517;
+  --muted: #5f513e;
+
+  --accent: #9a6410;
+  --accent-fg: #8b5a0e;
+  --accent-ink: #fff7e6;
+  --accent-soft: rgba(154, 100, 16, .12);
+  --ring: rgba(154, 100, 16, .26);
+  --sel: rgba(216, 168, 69, .38);
+
+  --ok: #2c8f5c;   --ok-bg: rgba(44, 143, 92, .12); --ok-fg: #206943;
+  --warn: #96650b; --warn-bg: rgba(150, 101, 11, .14); --warn-fg: #644406;
+  --err: #bd4038;  --err-bg: rgba(189, 64, 56, .10);   --err-fg: #94302a;
+
+  --glass: rgba(255, 252, 244, .62);
+  --glass-hi: rgba(255, 252, 244, .78);
+  --chrome: rgba(255, 251, 241, .64);
+  --line: rgba(64, 46, 22, .14);
+  --edge: rgba(64, 46, 22, .13);
+  --edge-hi: rgba(64, 46, 22, .30);
+  --gloss-top: rgba(255, 255, 255, .94);
+  --gloss-bot: rgba(64, 46, 22, .08);
+  --dot-ring: rgba(64, 46, 22, .24);
+  --scroll: rgba(64, 46, 22, .20);
+
+  --panel-solid: #fffcf4;
+  --input-bg: rgba(255, 253, 246, .88);
+  --pre-bg: #f6efdf;
+
+  --stage-a: rgba(228, 158, 60, .44);
+  --stage-b: rgba(206, 116, 74, .24);
+  --stage-c: rgba(150, 186, 120, .20);
+  --grain-o: .020;
+
+  --shadow-card: 0 14px 30px -14px rgba(74, 52, 20, .26);
+  --shadow-press: 0 3px 8px -3px rgba(74, 52, 20, .20);
+  --elev-1: 0 1px 1px rgba(74, 52, 20, .08), 0 14px 30px -14px rgba(74, 52, 20, .26),
+            inset 0 1px 0 var(--gloss-top), inset 0 -1px 0 var(--gloss-bot);
+  --elev-2: 0 24px 56px -24px rgba(74, 52, 20, .28), inset -1px 0 0 var(--gloss-bot),
+            inset 1px 0 0 var(--gloss-top);
+  --elev-3: 0 1px 1px rgba(74, 52, 20, .10), 0 6px 14px -6px rgba(74, 52, 20, .20),
+            inset 0 1px 0 rgba(255, 255, 255, .96);
+}
+
+/* ==================================================================
+   3 · 舞台（光源 + 细颗粒）
+   静态多层，不跑无限循环动画：缓慢循环会把注意力从读数上偷走。
+   ================================================================== */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -18%;
+  z-index: -2;
+  background:
+    radial-gradient(46% 42% at 78% 4%, var(--stage-a), transparent 66%),
+    radial-gradient(42% 48% at 6% 36%, var(--stage-b), transparent 70%),
+    radial-gradient(54% 46% at 44% 106%, var(--stage-c), transparent 72%),
+    linear-gradient(178deg, var(--bg2) 0%, var(--bg) 58%);
+}
+body::after {                     /* 颗粒：内联 SVG 湍流，2–3% 量级，不吃交互 */
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: var(--grain-o);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='170'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='170' height='170' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 170px 170px;
+}
+
+/* ==================================================================
+   4 · 基础与排版
+   ================================================================== */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.62 var(--font-ui);
+  display: flex;
+  transition: background-color var(--t-enter) var(--ease-spring),
+              color var(--t-enter) var(--ease-spring);
+}
+h1, h2, h3 { letter-spacing: -.018em; line-height: 1.22; margin: 0; }
+h1 { font-size: 19px; font-weight: 650; letter-spacing: .01em; } /* 中文品牌名不收紧，靠字重立起来 */
+h2 { font-size: 21px; font-weight: 620; margin: 4px 0 18px; }
+h3 { font-size: 14px; font-weight: 620; }
+p { margin: 0 0 8px; }
+code, kbd, samp, pre, .chip, td.num { font-family: var(--font-mono); }
+/* 长 token（路径、ID、base64 尾串）不得把容器顶穿：anywhere 会同时收紧 min-content，
+   这是 P66-3 实测 22 枚 code 命中的正解 —— 改的是排版面，不是阈值 */
+code, kbd, samp { overflow-wrap: anywhere; }
+/* 出处串闸（P66-3 第二枚真缺陷）：面板输出区里印有服务端存储根、路径、ID、URL——
+   一条 Windows 路径没有一个空格，默认换行策略不许在词内断开，于是「盒子没越界、内容越界」：
+   实测 p66_probe_narrow.json W=420 时 div.small.muted 的 right=406 仍在视口内，
+   而它的 scrollWidth 532 / clientWidth 392，溢出沿 overflow:visible 冒到文档 ⇒ doc 溢出 126px。
+   anywhere 与 break-word 的分工：后者只在「整行放不下该词」时断，前者还同时收紧 min-content，
+   对可能落进网格轨道的 .out 只有前者根治。改的是排版面，不是阈值。 */
+.out, .info-box, aside .foot { overflow-wrap: anywhere; }
+::selection { background: var(--sel); color: var(--text); }
+*:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-s); }
+
+dl, dt, dd { margin: 0; }         /* 键值面由 .kv 自己排版，不留 UA 外边距 */
+
+/* 滚动条：细、圆、随主题；轨道不画线，让内容区边缘保持干净 */
+* { scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--scroll);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--edge-hi); }
+
+/* ==================================================================
+   5 · 侧栏：最厚的一层玻璃（材质层级由模糊半径与阴影重量表达）
+   ================================================================== */
+aside {
+  width: 208px;
+  min-width: 208px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--chrome);
+  -webkit-backdrop-filter: blur(var(--blur-thick)) saturate(var(--sat));
+  backdrop-filter: blur(var(--blur-thick)) saturate(var(--sat));
+  border-right: 1px solid var(--edge);
+  box-shadow: var(--elev-2);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 10px 12px;
+  gap: 2px;
+}
+.brand { padding: 0 10px 14px; }
+#svc-badge { display: inline-block; margin-top: 8px; font-size: 12px; padding: 3px 10px; border-radius: var(--r-pill); }
+#svc-badge.ok { background: var(--ok-bg); color: var(--ok-fg); border: 1px solid var(--ok); }
+#svc-badge.err { background: var(--err-bg); color: var(--err-fg); border: 1px solid var(--err); }
+
+/* 主题色板 */
+.themes { display: flex; flex-wrap: wrap; gap: 9px; padding: 12px 10px 2px; }
+.sw {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--edge); cursor: pointer; padding: 0;
+  box-shadow: var(--elev-3), 0 2px 6px -2px rgba(0, 0, 0, .5);
+  transition: transform var(--t-act) var(--ease-out),
+              outline-color var(--t-color) var(--ease-spring),
+              border-color var(--t-color) var(--ease-spring);
+  outline: 2px solid transparent; outline-offset: 3px;
+}
+.sw:hover { transform: scale(1.14); border-color: var(--edge-hi); }
+.sw:active { transform: scale(.90); }          /* 按下瞬间就缩，不等结束 */
+.sw.on { outline-color: var(--accent); }
+.sw-night   { background: linear-gradient(135deg, #0b1322 34%, #3f6bb4 70%, #e4b863); }
+.sw-mist    { background: linear-gradient(135deg, #f7fafd 34%, #b9d3f4 72%, #e4b863); }
+.sw-celadon { background: linear-gradient(135deg, #081715 34%, #2b7d68 72%, #57d3ae); }
+.sw-amber   { background: linear-gradient(135deg, #f9f2e2 34%, #d9a441 72%, #9a6410); }
+
+/* 玻璃强度：三档分段控件。与色板分两行——颜色是身份，强度是环境适应，不混为一谈。
+   禁用态只在系统「减弱透明度 / 增强对比度」开启时出现，且此时「关」如实点亮。 */
+.glassctl { display: flex; align-items: center; gap: 6px; padding: 10px 10px 2px; }
+.glb { font-size: 12px; color: var(--muted); letter-spacing: .02em; flex: none; }
+.gt {
+  flex: 1 1 0; min-width: 30px; padding: 5px 0;
+  font-size: 12px; line-height: 1.5; font-family: inherit;
+  color: var(--muted); background: var(--glass-hi);
+  border: 1px solid var(--edge); border-radius: var(--r-s);
+  cursor: pointer;
+  transition: color var(--t-color) var(--ease-spring),
+              background-color var(--t-color) var(--ease-spring),
+              border-color var(--t-color) var(--ease-spring),
+              transform var(--t-act) var(--ease-out);
+}
+.gt:hover:not(:disabled) { color: var(--text); border-color: var(--edge-hi); }
+.gt:active:not(:disabled) { transform: scale(.94); }
+.gt.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+.gt:disabled { opacity: .40; cursor: not-allowed; }
+
+nav { display: flex; flex-direction: column; gap: 2px; }
+nav button {
+  display: block; width: 100%; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: var(--r-m);
+  color: var(--muted); padding: 9px 12px; font-size: 14px; cursor: pointer;
+  font-family: inherit;
+  transition: background-color var(--t-color) var(--ease-spring),
+              color var(--t-color) var(--ease-spring),
+              transform var(--t-act) var(--ease-out),
+              box-shadow var(--t-color) var(--ease-spring);
+}
+nav button:hover { color: var(--text); background: var(--glass-hi); border-color: var(--edge); }
+nav button:active { transform: scale(.975); }
+nav button.active {
+  color: var(--accent-ink); background: var(--accent);
+  border-color: transparent; box-shadow: var(--elev-3), var(--shadow-press);
+  font-weight: 600;
+}
+aside .foot { margin-top: auto; padding: 12px 10px 4px; font-size: 12px; line-height: 1.8; color: var(--muted); }
+#runtime-status b { color: var(--text); font-weight: 600; }
+
+/* ==================================================================
+   6 · 主区与面板
+   ================================================================== */
+main {
+  flex: 1; min-width: 0;
+  padding: 24px 30px 72px;
+  height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.panel { display: none; }
+.panel.active { display: block; animation: panel-in var(--t-enter) var(--ease-spring); }
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(12px) scale(.994); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 卡片与区块：中等厚度的玻璃 + 顶缘高光 + 底缘暗线。
+   min(300px,100%) 与 min-width:0 是 P66-3 的两枚排版闸：auto-fill 的 300px 轨道下限
+   在窄容器里本身就是溢出源（修前 531 窗实测 .card 右缘越界 5px），grid/flex 子项默认
+   min-width:auto 又会把轨道顶到 min-content。两者都不写死断点，让轨道自己收。 */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 16px; margin-bottom: 18px; }
+.card, section.block {
+  min-width: 0;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--blur-card)) saturate(var(--sat));
+  backdrop-filter: blur(var(--blur-card)) saturate(var(--sat));
+  border: 1px solid var(--edge);
+  border-radius: var(--r-l);
+  box-shadow: var(--elev-1);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  transition: border-color var(--t-color) var(--ease-spring),
+              box-shadow var(--t-color) var(--ease-spring);
+}
+.card h3, section.block > h3 { color: var(--accent-fg); margin: 0 0 11px; }
+
+/* ==================================================================
+   7 · 数据面（可读性优先，材质让位）
+   ================================================================== */
+.kv { display: grid; grid-template-columns: minmax(96px, 132px) minmax(0, 1fr); gap: 3px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+/* 数据表：修前 th{white-space:nowrap} 让「表头整串」成为该列 min-content，
+   八列 registry 在 900 窗就已顶穿容器（实测 table 宽 674 / 越界 171）。
+   这里让表头可折行、单元格可在任意点断词 —— 表格随容器收，而不是把容器撑开。
+   极窄档另有整表横向滚动的形制（见第 10 节 ≤560），那里才恢复 nowrap。 */
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+th { color: var(--muted); font-weight: 600; background: var(--bg2); }
+td { background: color-mix(in srgb, var(--panel-solid) 72%, transparent); }
+@supports not (background: color-mix(blue, white)) { td { background: transparent; } }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 4px 11px; border-radius: var(--r-pill);
+  background: var(--glass-hi); border: 1px solid var(--edge);
+  transition: border-color var(--t-color) var(--ease-spring);
+}
+.chip:hover { border-color: var(--edge-hi); }
+.chip .dot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  border: 1px solid var(--dot-ring); flex: none;
+}
+.badge {
+  display: inline-block; font-size: 12px; padding: 2px 9px;
+  border-radius: var(--r-pill); border: 1px solid; white-space: nowrap;
+}
+.badge.ok { color: var(--ok-fg); border-color: var(--ok); background: var(--ok-bg); }
+.badge.warn { color: var(--warn-fg); border-color: var(--warn); background: var(--warn-bg); }
+.badge.err { color: var(--err-fg); border-color: var(--err); background: var(--err-bg); }
+.badge.mut { color: var(--muted); border-color: var(--line); }
+
+/* ==================================================================
+   8 · 表单与按钮
+   ================================================================== */
+.form-row { display: flex; flex-wrap: wrap; gap: 9px; align-items: flex-end; margin-bottom: 10px; }
+label.f { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 4px; min-width: 0; }
+label.f.grow { flex: 1 1 260px; }   /* 此前无规则：二十余处 grow 意图落空，本轮兑现 */
+
+input, select, textarea {
+  background: var(--input-bg); color: var(--text);
+  border: 1px solid var(--edge); border-radius: var(--r-s);
+  padding: 7px 10px; font-size: 13px; font-family: inherit; min-width: 0;
+  max-width: 100%;                 /* 修前只有 width 没有上限 ⇒ label.f 43、.form-row 38、.block 49 命中 */
+  transition: border-color var(--t-color) var(--ease-spring),
+              box-shadow var(--t-color) var(--ease-spring),
+              background-color var(--t-color) var(--ease-spring);
+}
+input:hover, select:hover, textarea:hover { border-color: var(--edge-hi); }
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring);
+}
+input[type=text], input[type=number] { width: 150px; }
+input.wide { width: 340px; max-width: 100%; }
+textarea { width: 100%; font-family: var(--font-mono); font-size: 12px; resize: vertical; }
+
+button.act {
+  background: var(--accent); color: var(--accent-ink);
+  border: none; border-radius: var(--r-s);
+  padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+  box-shadow: var(--elev-3), var(--shadow-press);
+  transition: filter var(--t-color) var(--ease-spring),
+              transform var(--t-act) var(--ease-out),
+              box-shadow var(--t-color) var(--ease-spring);
+}
+button.act:hover { filter: brightness(1.08); box-shadow: var(--elev-3), var(--shadow-card); }
+button.act:active { transform: scale(.965); filter: brightness(.94); box-shadow: var(--shadow-press); }
+button.act:disabled { opacity: .45; cursor: wait; transform: none; box-shadow: none; }
+
+button.ghost {
+  background: var(--glass-hi); color: var(--text);
+  border: 1px solid var(--edge); border-radius: var(--r-s);
+  padding: 8px 14px; font-size: 13px; cursor: pointer; font-family: inherit;
+  transition: border-color var(--t-color) var(--ease-spring),
+              background-color var(--t-color) var(--ease-spring),
+              transform var(--t-act) var(--ease-out);
+}
+button.ghost:hover { border-color: var(--accent); background: var(--accent-soft); }
+button.ghost:active { transform: scale(.965); }
+
+/* ==================================================================
+   9 · 输出区块
+   ================================================================== */
+.out { margin-top: 12px; }
+/* 空结果占位（P69）：每个输出框在首次请求前如实说明「这里将出现什么」。
+   renderOut 只要有响应就必然写入内容（成功走 viewer + <details> 原文块，失败走 err-box），
+   :empty 因此自然失效——这条只可能在「真的一次请求都没发过」时可见，盖不住任何真实响应。 */
+.out:empty::after {
+  content: "尚无结果 · 点击上方按钮后，这里原样显示服务端的真实响应";
+  display: block; margin-top: 9px; padding: 10px 12px;
+  border: 1px dashed var(--edge-hi); border-radius: var(--r-m);
+  color: var(--muted); font-size: 12px; line-height: 1.5;
+}
+.err-box {
+  border: 1px solid var(--err); background: var(--err-bg); color: var(--err-fg);
+  border-radius: var(--r-m); padding: 9px 12px; font-size: 13px; margin-top: 9px;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.info-box {
+  border: 1px solid var(--warn); background: var(--warn-bg); color: var(--warn-fg);
+  border-radius: var(--r-m); padding: 9px 12px; font-size: 13px; margin-top: 9px;
+  white-space: pre-wrap;
+}
+details.raw { margin-top: 9px; }
+details.raw summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 2px 0; }
+details.raw[open] summary { color: var(--text); }
+
+/* 长说明折叠（P69）：结论前置一句、原文整段留在 <details> 内——不删一字，
+   只是不再让 1,600 字的诚实申报独占首屏（判据仍按正文原串命中，声称面没有缩水）。
+   箭头是 ::before 画出来的，随 [open] 旋转 90°；焦点环交给全站 *:focus-visible，不在此重复。 */
+details.info-fold { padding: 0; }
+details.info-fold > summary {
+  cursor: pointer; padding: 9px 12px; font-size: 13px; font-weight: 600;
+  list-style: none;
+}
+details.info-fold > summary::-webkit-details-marker { display: none; }
+details.info-fold > summary::before {
+  content: "▸"; display: inline-block; margin-right: 7px; opacity: .8;
+  transition: transform var(--t-act) var(--ease-spring);
+}
+details.info-fold[open] > summary::before { transform: rotate(90deg); }
+details.info-fold > div {
+  margin: 0 12px 10px; padding-top: 9px; font-size: 13px; line-height: 1.65;
+  border-top: 1px solid var(--edge);
+}
+pre {
+  background: var(--pre-bg); border: 1px solid var(--line); border-radius: var(--r-m);
+  padding: 12px; font-size: 12px; line-height: 1.55; overflow: auto;
+  max-height: 420px; margin: 7px 0 0;
+}
+
+/* 进度条：宽度变化用弹性缓出，读作「物体在走」而不是「数字在跳」 */
+.bar {
+  position: relative; height: 18px; min-width: min(120px, 100%); overflow: hidden;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-pill);
+}
+.bar > i {
+  position: absolute; inset: 0; width: 0; border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--ok), color-mix(in srgb, var(--ok) 72%, #000));
+  opacity: .78;
+  transition: width var(--t-move) var(--ease-spring);
+}
+@supports not (background: color-mix(blue, white)) { .bar > i { background: var(--ok); } }
+.bar > span {
+  position: relative; display: block; text-align: center;
+  font-size: 12px; line-height: 18px; font-family: var(--font-mono);
+}
+
+/* 接线进度列（P69）：P68 实测概览面板的按域表在 900 窗下「域」列被拉满、中间整片空，
+   因为那一格只有一个 12/14 的裸数字。这里把同一份派生数交给真实绘制的面条来占位——
+   空列变成有信息量的宽度，且宽度与 wired/all 同源，不新增任何第二套口径。 */
+td.bar-cell { width: 42%; }
+
+/* 条码画布白底是数据语义豁免：黑条必须压在白底上才可被解码 */
+#bc-canvas {
+  background: #fff; border-radius: var(--r-m);
+  max-width: 100%; height: auto; image-rendering: pixelated; margin-top: 10px;
+  box-shadow: var(--shadow-card);
+}
+.svg-wrap { background: var(--pre-bg); border: 1px solid var(--line); border-radius: var(--r-m); margin-top: 10px; overflow: auto; }
+.svg-wrap svg { display: block; max-width: 100%; }
+
+.thumb {
+  width: 56px; height: 56px; object-fit: cover; display: block;
+  border-radius: var(--r-s); border: 1px solid var(--edge); background: var(--bg2);
+}
+.thumb-none {
+  width: 56px; height: 56px; border: 1px dashed var(--edge); border-radius: var(--r-s);
+  color: var(--muted); font-size: 12px; display: flex; align-items: center; justify-content: center;
+}
+/* Phase 48：素材缩略图走真实 HTTP 二进制请求，点击放大（反馈在按下，不在结束） */
+img.thumb { cursor: zoom-in; transition: border-color var(--t-color) var(--ease-spring), transform var(--t-act) var(--ease-out); }
+img.thumb:hover { border-color: var(--accent); }
+img.thumb:active { transform: scale(.94); }
+.thumb-view {
+  margin-top: 12px; padding: 12px;
+  border: 1px solid var(--edge); border-radius: var(--r-m);
+  background: var(--glass-hi);
+}
+.thumb-view-inner { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.thumb-view img, .thumb-lg {
+  display: block; width: auto; height: auto;
+  max-width: min(288px, 100%); border-radius: var(--r-s);
+  image-rendering: auto; border: 1px solid var(--edge); box-shadow: var(--shadow-card);
+}
+
+.ai-out { max-height: 220px; white-space: pre-wrap; word-break: break-word; }
+/* 1fr 其实是 minmax(auto,1fr)：下限 min-content 会让轨道在窄容器里顶穿网格
+   （修前 560 窗 color 面板 .block 宽 378 / 越界 56 即此）。写 minmax(0,1fr) 才是「等分且不溢出」。 */
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.grid2 > * { min-width: 0; }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.load { color: var(--muted); font-size: 13px; margin-left: 8px; }
+
+/* ==================================================================
+   10 · 响应式收口（P66-3：窄窗不许把内容藏进主区内部的横向滚动条）
+   实测依据 p66_measure_before.json —— 8 视口 × 15 面板 = 120 读数，
+   doc 级溢出恒为 0（「没有页面横向滚动条」是假绿），main 级溢出从 900 起
+   1 面、560 起 10 面、420 起 14 面、320 全 15 面，max_main_overflow=621px。
+   三条根因逐条兑现：① 壳层从不重排（aside 固定 208 + main 左右 30，320 窗只剩 102 内容盒）；
+   ② 轨道下限=min-content（.grid2 / .cards / th{nowrap}）；③ 控件只写 width 不写上限。
+   ================================================================== */
+@media (max-width: 1100px) {
+  main { padding: 20px 22px 64px; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 14px; }
+}
+
+/* 900 以下壳层竖排：侧栏收成顶部玻璃条并吸顶，主区交还给文档滚动。
+   仍用 sticky + backdrop-filter，让顶部条浮在内容之上而不是吃掉一整条高度。 */
+@media (max-width: 900px) {
+  body { flex-direction: column; }
+  aside {
+    width: auto; min-width: 0; height: auto;
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    padding: 11px 16px; border-right: none; border-bottom: 1px solid var(--edge);
+  }
+  .brand { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 0; flex: 1 1 100%; }
+  .brand h1 { font-size: 17px; }
+  #svc-badge { margin-top: 0; }
+  .themes { padding: 0; gap: 8px; }
+  /* 顶部条里玻璃三档独占一行并铺满：挤进品牌行会让 flex:1 1 0 的中文单字按钮
+     各自塌成一字宽（实测 375 窗 13px/枚，触摸目标报废）。 */
+  .glassctl { flex: 1 1 100%; padding: 2px 0 0; }
+  nav { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; gap: 5px; }
+  nav button { width: auto; padding: 6px 11px; font-size: 13px; }
+  aside .foot { margin-top: 0; flex: 1 1 100%; padding: 0; line-height: 1.6; }
+  main { flex: none; height: auto; overflow: visible; padding: 18px 18px 56px; }
+}
+
+@media (max-width: 720px) {
+  main { padding: 16px 14px 48px; }
+  .card, section.block { padding: 13px 14px; margin-bottom: 14px; }
+  .cards { gap: 12px; }
+}
+
+/* 560 以下才换「整表横向滚动」形制：此时逐列折行会把三十字段名切成十行，
+   可读性反而更差。滚动条是可见的（第 4 节把滚动条画细但没藏），不是无声裁切。
+   表头在本档恢复 nowrap —— 既然横向滚动，就让它滚成一张正常的表。 */
+@media (max-width: 560px) {
+  .panel table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .panel th { white-space: nowrap; }
+  .card, section.block { padding: 12px 11px; }
+  h2 { font-size: 19px; margin-bottom: 14px; }
+}
+
+/* 420 以下表单一律一列一行：字段拿到整行宽度，按钮保持自身宽度不被拉伸 */
+@media (max-width: 420px) {
+  .form-row { gap: 8px; }
+  .form-row > label.f { flex: 1 1 100%; }
+  .kv { grid-template-columns: minmax(0, 1fr); }
+  .kv dd { margin-bottom: 7px; }
+  .thumb-view-inner { gap: 9px; }
+}
+
+/* ==================================================================
+   11 · 无障碍与低能力回退（材质让位于可读性与控制感）
+   ================================================================== */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  aside, .card, section.block { background: var(--panel-solid); }
+}
+
+/* 减弱动效：去掉位移与缩放，保留颜色反馈；不做「没有反馈」 */
+@media (prefers-reduced-motion: reduce) {
+  /* 主题块是 html[data-theme="…"]（0,1,1）：裸 :root（0,1,0）在这里必输，
+     token 覆盖会成死代码（run3 实测 --grain-o 仍 .028）。选择器提到同一特指度，靠源序取胜。 */
+  html[data-theme], :root { --t-enter: 1ms; --t-move: 1ms; --t-color: 1ms; --t-act: 1ms; }
+  .panel.active { animation: none; }
+  *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+  nav button:active, .sw:active, .gt:active, button.act:active, button.ghost:active, img.thumb:active { transform: none; }
+}
+
+/* 减弱透明度：玻璃冻成不透明材质，光源与颗粒撤掉 */
+@media (prefers-reduced-transparency: reduce) {
+  body::before, body::after { display: none; }
+  aside, .card, section.block, .chip, button.ghost, .thumb-view {
+    background: var(--panel-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .kv dd, .card h3, section.block > h3 { color: var(--text); }
+}
+
+/* 增加对比度：边缘画实线，强调色只用于文字与描边，不再当大面积填充 */
+@media (prefers-contrast: more) {
+  body::before, body::after { display: none; }
+  html[data-theme], :root { --grain-o: 0; }   /* 同上：同特指度 + 后出现，才压得过主题块 */
+  aside, .card, section.block, .chip, .thumb-view, .bar, pre, table, th, td {
+    background: var(--panel-solid);
+    border-color: var(--text);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  nav button.active { color: var(--bg); background: var(--panel-solid); border-color: var(--text); }
+  .card h3, section.block > h3 { color: var(--text); }
+}
+
+/* ==================================================================
+   12 · 玻璃强度（用户可控的三档）
+   默认档 full 不做任何覆写：完整模糊、舞台光与颗粒就是基线。
+   soft 只调模糊/饱和与光晕强度，不碰任何面板底色——主题的色相与明度保持原样；
+   off 与「减弱透明度」同形：实底、无模糊、撤掉光源与颗粒，强调色仍只用于文字与描边。
+   优先级：本节不覆盖背景，系统「减弱透明度 / 增强对比度」的媒体查询仍把面板压成实底；
+   用户档位只能在无障碍上限之内调低材质，不能反向翻越。
+   ================================================================== */
+html[data-glass="soft"] {
+  --blur-thick: 26px;
+  --blur-card: 18px;
+  --sat: 1.45;
+}
+html[data-glass="soft"] body::before { opacity: .55; }
+html[data-glass="soft"] body::after { opacity: calc(var(--grain-o) * .55); }
+
+html[data-glass="off"] body::before,
+html[data-glass="off"] body::after { display: none; }
+html[data-glass="off"] aside,
+html[data-glass="off"] .card,
+html[data-glass="off"] section.block,
+html[data-glass="off"] .chip,
+html[data-glass="off"] button.ghost,
+html[data-glass="off"] .thumb-view {
+  background: var(--panel-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-glass="off"] .kv dd,
+html[data-glass="off"] .card h3,
+html[data-glass="off"] section.block > h3 { color: var(--text); }
+
+/* ==================================================================
+   12 · 结果区骨架与重试（P74A）
+   ------------------------------------------------------------------
+   骨架只在等待期出现，三轮有限呼吸后静止 —— 全站禁 infinite 的
+   既有红线不被新件破坏；减弱动效时直接静止。结果区由 app.js 的
+   renderOut 统一接管：先清旧结果、aria-busy=true，落定后 false。
+   ================================================================== */
+.skel { display: grid; gap: 8px; padding: 4px 0; }
+.skel i {
+  display: block; height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--glass-hi);
+  border: 1px solid var(--edge);
+  animation: skel-breathe 1.1s ease-in-out 3;
+}
+.skel i:nth-child(2) { width: 84%; }
+.skel i:nth-child(3) { width: 62%; }
+@keyframes skel-breathe {
+  0%, 100% { opacity: .38; }
+  50%      { opacity: .80; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel i { animation: none; opacity: .55; }
+}
+[data-retry] { margin-top: 10px; }

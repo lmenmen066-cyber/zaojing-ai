@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>造境桥接 · Photoshop</title>
+  <style>
+    body { font: 12px/1.5 system-ui, sans-serif; color: #e8e8e8; background: #2d2d2d; padding: 10px; }
+    h1 { font-size: 14px; margin: 0 0 8px; }
+    .row { margin: 6px 0; }
+    button { padding: 6px 12px; background: #4a76c9; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
+    button:disabled { background: #555; cursor: default; }
+    #status { font-weight: bold; }
+    .ok { color: #6ec16e; } .err { color: #e06c6c; } .idle { color: #bbb; }
+    #log { height: 200px; overflow-y: auto; background: #1e1e1e; border-radius: 4px; padding: 6px; font-family: monospace; font-size: 11px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>造境 AI · Photoshop 桥接面板</h1>
+  <div class="row">状态：<span id="status" class="idle">未连接</span></div>
+  <div class="row"><button id="connect">连接 Agent Service</button></div>
+  <div class="row"><button id="pickDiscovery">选择 bridge-endpoint.json</button></div>
+  <div class="row"><label><input type="checkbox" id="verbose" /> 详细日志</label></div>
+  <div id="log"></div>
+  <script src="main.js"></script>
+</body>
+</html>

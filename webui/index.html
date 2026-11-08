@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>造境 AI 设计智能体 · 控制台</title>
+<!-- P69：图标以 data URI 内联——零新增文件、零外链、离线红线不动；此前浏览器每次加载都去 GET /favicon.ico 并如实 404，是控制台唯一一条控制台报错。 -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Crect%20width=%2232%22%20height=%2232%22%20rx=%227%22%20fill=%22%230b1322%22/%3E%3Cpath%20d=%22M16%206.5%2026.5%2025H5.5z%22%20fill=%22%23e4b863%22/%3E%3Ccircle%20cx=%2216%22%20cy=%2218.5%22%20r=%224.2%22%20fill=%22%230b1322%22/%3E%3Ccircle%20cx=%2216%22%20cy=%2218.5%22%20r=%221.7%22%20fill=%22%23e4b863%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/ui/style.css">
+<script>
+/* 主题初始化：先读持久化选择，无记录时跟随系统浅色偏好；纯内联、零外链 */
+(function(){
+  var t=null;try{t=localStorage.getItem("zj-theme");}catch(e){}
+  if(t!=="night"&&t!=="mist"&&t!=="celadon"&&t!=="amber"){
+    t=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)?"mist":"night";
+  }
+  document.documentElement.setAttribute("data-theme",t);
+
+  /* 玻璃强度初始化：full | soft | off。默认 full；系统「减弱透明度 / 增强对比度」
+     由样式表媒体查询直接压成实底——系统偏好是上限，不被这个开关翻越。
+     开关的作用是让没有改系统设置的用户也能自行减淡或关掉材质。 */
+  var g=null;try{g=localStorage.getItem("zj-glass");}catch(e){}
+  if(g!=="full"&&g!=="soft"&&g!=="off"){ g="full"; }
+  document.documentElement.setAttribute("data-glass",g);
+})();
+</script>
+</head>
+<body>
+<aside>
+  <div class="brand">
+    <h1>造境 AI</h1>
+    <span id="svc-badge" class="badge mut">检测服务中…</span>
+    <div class="themes" role="group" aria-label="主题切换">
+      <button class="sw sw-night" data-theme-btn="night" title="玄夜 · 深色玻璃" aria-label="玄夜主题" aria-pressed="false"></button>
+      <button class="sw sw-mist" data-theme-btn="mist" title="雾白 · 浅色玻璃" aria-label="雾白主题" aria-pressed="false"></button>
+      <button class="sw sw-celadon" data-theme-btn="celadon" title="青瓷 · 冷青墨绿" aria-label="青瓷主题" aria-pressed="false"></button>
+      <button class="sw sw-amber" data-theme-btn="amber" title="琥珀 · 暖调浅色" aria-label="琥珀主题" aria-pressed="false"></button>
+    </div>
+    <div class="glassctl" role="group" aria-label="玻璃强度">
+      <span class="glb" aria-hidden="true">玻璃</span>
+      <button class="gt" data-glass-btn="full" title="全玻璃 · 完整模糊与舞台光" aria-label="全玻璃强度" aria-pressed="false">全</button>
+      <button class="gt" data-glass-btn="soft" title="柔和 · 模糊与光晕减半，仍保留材质" aria-label="柔和玻璃强度" aria-pressed="false">柔</button>
+      <button class="gt" data-glass-btn="off" title="关闭 · 实底不透明，最高可读性" aria-label="关闭玻璃材质" aria-pressed="false">关</button>
+    </div>
+  </div>
+  <nav id="nav">
+    <button data-panel="overview" class="active">总览 · 真值表</button>
+    <button data-panel="eval">评估中心</button>
+    <button data-panel="color">色彩</button>
+    <button data-panel="packaging">包装 · 条码 · 刀版</button>
+    <button data-panel="assets">素材库</button>
+    <button data-panel="typo">字体排版</button>
+    <button data-panel="layout">设计工具</button>
+    <button data-panel="brand">品牌智能</button>
+    <button data-panel="print">印前检查</button>
+    <button data-panel="knowledge">知识库</button>
+    <button data-panel="revision">改稿评审</button>
+    <button data-panel="ops">运维运行时</button>
+    <button data-panel="flow">流程与恢复</button>
+    <button data-panel="detail">实体明细联查</button>
+    <button data-panel="write">配置与写操作</button>
+  </nav>
+  <div class="foot small" id="runtime-status">运行时信息加载中…</div>
+</aside>
+<main>
+
+  <!-- ======================= 总览 ======================= -->
+  <section id="panel-overview" class="panel active">
+    <h2>总览 · 服务与能力真值表</h2>
+    <div class="cards">
+      <div class="card"><h3>服务健康 /health</h3><dl id="ov-health"></dl></div>
+      <div class="card"><h3>授权状态 /license</h3><dl id="ov-license"></dl></div>
+      <div class="card">
+        <h3>引擎加载（/health 自报，逐项真实 ready · Phase 48 起计数不再硬编于标题，避免与服务端漂移）</h3>
+        <div class="chips" id="ov-engines"></div>
+        <div class="out small muted">全部 ready 表示引擎模块真实导入成功；缺失项会如实显示在下方加载错误中。</div>
+      </div>
+    </div>
+    <section class="block">
+      <h3>能力注册表 /capabilities（逐项证据由评测报告实时派生，§2 红线：verified 只在有真实黄金用例证据时为真）</h3>
+      <div id="ov-registry"><span class="muted">加载中…</span></div>
+    </section>
+    <section class="block">
+      <h3>端点接线覆盖（实时派生自 /openapi.json × 本页请求代码串匹配，非手写清单 · §2 红线：幽灵接线当场示警）</h3>
+      <div id="ov-wiring"></div>
+    </section>
+    <section class="block">
+      <h3>请求指标 /metrics（原始响应）</h3>
+      <button class="ghost" id="ov-metrics-btn">拉取</button>
+      <div class="out" id="ov-metrics"></div>
+    </section>
+  </section>
+
+  <!-- ======================= 评估中心 ======================= -->
+  <section id="panel-eval" class="panel">
+    <h2>评估中心 · 真实黄金用例评测台</h2>
+    <div class="form-row">
+      <button class="act" id="ev-run">运行全量评测（逐条真实调用引擎判分）</button>
+      <button class="ghost" id="ev-suite">查看用例清单（不执行）</button>
+      <button class="ghost" id="ev-reports">刷新报告列表</button>
+      <span class="load" id="ev-load"></span>
+    </div>
+    <div id="ev-summary"></div>
+    <div class="grid2">
+      <section class="block">
+        <h3>分域结果</h3>
+        <div id="ev-cats"><span class="muted">尚未运行。点击「运行全量评测」。</span></div>
+      </section>
+      <section class="block">
+        <h3>负控校准（期望必为 fail，抓伪造判分）</h3>
+        <div id="ev-calib"><span class="muted">运行后显示。</span></div>
+      </section>
+    </div>
+    <section class="block">
+      <h3>落盘报告</h3>
+      <div id="ev-reportlist"><span class="muted">点击「刷新报告列表」。</span></div>
+    </section>
+  </section>
+
+  <!-- ======================= 色彩 ======================= -->
+  <section id="panel-color" class="panel">
+    <h2>色彩引擎 · /api/v1/color/*</h2>
+    <div class="grid2">
+      <section class="block"><h3>HEX 转换 /color/convert</h3>
+        <div class="form-row"><label class="f">hex<input id="cc-hex" type="text" value="#2E7D46"></label>
+        <button class="act" id="cc-convert">转换</button></div><div class="out" id="cc-convert-out"></div></section>
+      <section class="block"><h3>对比度 WCAG /color/contrast</h3>
+        <div class="form-row"><label class="f">前景<input id="ct-fg" type="text" value="#FFFFFF"></label>
+        <label class="f">背景<input id="ct-bg" type="text" value="#2E7D46"></label>
+        <button class="act" id="ct-run">检查</button></div><div class="out" id="ct-out"></div></section>
+      <section class="block"><h3>色差 ΔE /color/delta-e</h3>
+        <div class="form-row"><label class="f">颜色 A<input id="de-a" type="text" value="#2E7D46"></label>
+        <label class="f">颜色 B<input id="de-b" type="text" value="#3A8B54"></label>
+        <label class="f">方法<select id="de-m"><option>ciede2000</option><option>cmc</option><option>76</option></select></label>
+        <button class="act" id="de-run">计算</button></div><div class="out" id="de-out"></div></section>
+      <section class="block"><h3>Pantone 就近 /color/pantone</h3>
+        <div class="form-row"><label class="f">hex<input id="pt-hex" type="text" value="#C8102E"></label>
+        <button class="act" id="pt-run">匹配</button></div><div class="out" id="pt-out"></div></section>
+      <section class="block"><h3>配色和声 /color/harmony</h3>
+        <div class="form-row"><label class="f">基色<input id="hm-base" type="text" value="#2E7D46"></label>
+        <label class="f">方案<select id="hm-scheme"><option>complementary</option><option>analogous</option><option>triadic</option><option>split-complementary</option><option>tetradic</option></select></label>
+        <button class="act" id="hm-run">生成</button></div><div class="out" id="hm-out"></div></section>
+      <section class="block"><h3>调色板提取 /color/palette（输入为服务端磁盘上的真实图像路径）</h3>
+        <div class="form-row"><label class="f">图像路径<input id="pl-path" class="wide" type="text" placeholder="例如 D:\images\art.png"></label>
+        <label class="f">k<input id="pl-k" type="number" value="6" min="1" max="12"></label>
+        <button class="act" id="pl-run">提取</button></div><div class="out" id="pl-out"></div></section>
+      <section class="block"><h3>最近色 /color/nearest</h3>
+        <div class="form-row"><label class="f">颜色<input id="nr-color" type="text" value="#3A8B54"></label>
+        <label class="f">调色板（逗号分隔）<input id="nr-pal" class="wide" type="text" value="#C8102E,#2E7D46,#1B3A6B"></label>
+        <button class="act" id="nr-run">查找</button></div><div class="out" id="nr-out"></div></section>
+    </div>
+  </section>
+
+  <!-- ======================= 包装 ======================= -->
+  <section id="panel-packaging" class="panel">
+    <h2>包装引擎 · 条码 / 刀版拓扑 / 刀版几何</h2>
+    <section class="block">
+      <h3>条码 / 二维码渲染 /packaging/barcode（一维：真实校验位 + 模块位串；QR：ISO/IEC 18004 纯标准库真实编码，画布按服务端返回的模块阵绘制）</h3>
+      <div class="form-row">
+        <label class="f">数字码<input id="bc-code" type="text" value="590123412345"></label>
+        <label class="f">码制<select id="bc-sym"><option>EAN13</option><option>EAN8</option><option>QR</option><option>Code128</option></select></label>
+        <label class="f">QR 纠错等级<select id="bc-ec"><option>L</option><option selected>M</option><option>Q</option><option>H</option></select></label>
+        <label class="f">模块宽 px<input id="bc-scale" type="number" value="2" min="1" max="8"></label>
+        <label class="f">条纹高 px<input id="bc-height" type="number" value="60" min="10" max="200"></label>
+        <label class="f">静区(模块，留空按码制)<input id="bc-quiet" type="number" value="11" min="0"></label>
+        <label class="f">绘制文字<select id="bc-text"><option value="1">是</option><option value="0">否</option></select></label>
+        <button class="act" id="bc-run">渲染</button>
+      </div>
+      <div class="out" id="bc-out"></div>
+      <canvas id="bc-canvas" width="10" height="10" hidden></canvas>
+    </section>
+    <section class="block">
+      <h3>刀版面板拓扑 /packaging/panel-topology（矢量面板矩形 → 真实邻接/折线/连通性/裁切线长）</h3>
+      <div class="form-row">
+        <label class="f">tol<input id="tp-tol" type="text" value="1e-6"></label>
+        <label class="f">min_fold<input id="tp-minfold" type="text" value="1e-6"></label>
+        <label class="f">单位<input id="tp-units" type="text" value="mm"></label>
+        <button class="act" id="tp-run">分析</button>
+        <button class="ghost" id="tp-reset">恢复 BOX-9 示例</button>
+      </div>
+      <label class="f">面板（每行 id,x,y,width,height）
+        <textarea id="tp-panels" rows="10">front,0,0,60,100
+right,60,0,50,100
+back,110,0,60,100
+left,170,0,50,100
+glue,220,0,10,100
+top_f,60,100,50,30
+top_b,110,100,60,30
+bot_f,60,-30,50,30
+bot_b,110,-30,60,30</textarea>
+      </label>
+      <div class="out" id="tp-out"></div>
+      <div class="svg-wrap" id="tp-svg"></div>
+    </section>
+    <div class="grid2">
+      <section class="block"><h3>刀版几何 /packaging/dieline</h3>
+        <div class="form-row">
+          <label class="f">宽<input id="dl-w" type="number" value="100" step="any"></label>
+          <label class="f">高<input id="dl-h" type="number" value="160" step="any"></label>
+          <label class="f">出血<input id="dl-bleed" type="number" value="3" step="any"></label>
+          <label class="f">安全距<input id="dl-safe" type="number" value="5" step="any"></label>
+          <label class="f">单位<input id="dl-units" type="text" value="mm"></label>
+          <button class="act" id="dl-run">推导</button>
+        </div><div class="out" id="dl-out"></div></section>
+      <section class="block"><h3>拼版 /packaging/imposition</h3>
+        <div class="form-row">
+          <label class="f">模切宽<input id="im-dw" type="number" value="100" step="any"></label>
+          <label class="f">模切高<input id="im-dh" type="number" value="160" step="any"></label>
+          <label class="f">数量<input id="im-count" type="number" value="24" min="1"></label>
+          <label class="f">用纸宽<input id="im-sw" type="number" value="880" step="any"></label>
+          <label class="f">用纸高<input id="im-sh" type="number" value="590" step="any"></label>
+          <label class="f">间距<input id="im-gap" type="number" value="5" step="any"></label>
+          <button class="act" id="im-run">计算</button>
+        </div><div class="out" id="im-out"></div></section>
+    </div>
+  </section>
+
+  <!-- ======================= 素材 ======================= -->
+  <section id="panel-assets" class="panel">
+    <h2>素材库 · /api/v1/assets</h2>
+    <div class="info-box">本面板的缩略图列为<b>真实二进制 HTTP 请求</b>：<code>GET /api/v1/assets/{id}/thumbnail</code> 由浏览器以 <code>&lt;img src&gt;</code> 直接发起，返回服务端 Pillow 真实生成的 PNG（非占位图）。取不到时如实显示失败原因——<code>404</code> 素材不存在、<code>409</code> 该素材无可用缩略图（非图像或尚未生成），界面不以图片占位符冒充。点击缩略图可放大查看；因服务端未开放原图静态路由，放大视图仍是同一张缩略图，界面不假装它是原图。</div>
+    <div class="form-row">
+      <button class="ghost" id="as-refresh">刷新列表</button>
+      <button class="act" id="as-search-btn">语义搜索</button>
+      <input id="as-q" class="wide" type="text" aria-label="素材检索关键词" placeholder="搜索查询，例如：绿色茶叶包装纹理">
+      <span class="load" id="as-load"></span>
+    </div>
+    <div class="out" id="as-list"><span class="muted">加载中…</span></div>
+    <div class="out" id="as-search"></div>
+  </section>
+
+  <!-- ======================= 字体排版 ======================= -->
+  <section id="panel-typo" class="panel">
+    <h2>字体排版 · /api/v1/typography</h2>
+    <div class="grid2">
+      <section class="block"><h3>字体索引 /typography/fonts</h3>
+        <div class="form-row">
+          <label class="f">family 过滤<input id="ty-filter" type="text" placeholder="可选"></label>
+          <label class="f">仅 CJK<select id="ty-cjk"><option value="0">否</option><option value="1">是</option></select></label>
+          <button class="act" id="ty-list-btn">列出</button>
+          <button class="ghost" id="ty-scan-btn">重建索引（扫描系统字体，较慢）</button>
+        </div><div class="out" id="ty-list"></div></section>
+      <section class="block"><h3>真实度量 /typography/metrics（按字形 hmtx 累加）</h3>
+        <div class="form-row">
+          <label class="f">字体（id/family/PostScript）<input id="tm-font" class="wide" type="text" value="Arial"></label>
+          <label class="f">文本<input id="tm-text" type="text" value="Hello 造境"></label>
+          <label class="f">字号 pt<input id="tm-size" type="number" value="24" step="any"></label>
+          <button class="act" id="tm-run">度量</button>
+        </div><div class="out" id="tm-out"></div></section>
+      <section class="block"><h3>缺失字体替换 /typography/match（覆盖度硬门槛）</h3>
+        <div class="form-row">
+          <label class="f">缺失字体名<input id="tq-missing" class="wide" type="text" value="Helvetica Neue"></label>
+          <label class="f">需覆盖文本（可选）<input id="tq-text" type="text" placeholder="提供则作为硬门槛"></label>
+          <label class="f">要求 CJK<select id="tq-cjk"><option value="0">否</option><option value="1">是</option></select></label>
+          <button class="act" id="tq-run">匹配候选</button>
+        </div><div class="out" id="tq-out"></div></section>
+    </div>
+  </section>
+
+  <!-- ======================= 设计工具 ======================= -->
+  <section id="panel-layout" class="panel">
+    <h2>设计工具 · /api/v1/layout/* · 对比 · 去背景</h2>
+    <div class="grid2">
+      <section class="block"><h3>对象集合（各工具共用 · x/y 为左上角）</h3>
+        <label class="f">objects（JSON 数组）<textarea id="la-objs" rows="7">[
+  {"id": "标题", "x": 10, "y": 10, "width": 100, "height": 30},
+  {"id": "副标题", "x": 50, "y": 20, "width": 100, "height": 30}
+]</textarea></label>
+        <label class="f">画布 canvas（JSON）<input id="la-canvas" class="wide" type="text" value='{"width": 300, "height": 200}'></label>
+      </section>
+      <section class="block"><h3>对齐 /layout/align</h3>
+        <div class="form-row"><label class="f">模式<select id="la-mode"><option>left</option><option>right</option><option>hcenter</option><option>top</option><option>bottom</option><option>vcenter</option></select></label>
+        <button class="act" id="la-align">执行</button></div><div class="out" id="la-align-out"></div></section>
+      <section class="block"><h3>碰撞检测 /layout/collide</h3>
+        <div class="form-row"><label class="f">min_overlap_ratio<input id="lc-min" type="number" value="0" step="any"></label>
+        <button class="act" id="lc-run">检测</button></div><div class="out" id="lc-out"></div></section>
+      <section class="block"><h3>等距分布 /layout/distribute</h3>
+        <div class="form-row"><label class="f">轴<select id="ld-axis"><option value="x">x</option><option value="y">y</option></select></label>
+        <label class="f">间距（留空自动）<input id="ld-gap" type="number" step="any" placeholder="自动"></label>
+        <button class="act" id="ld-run">分布</button></div><div class="out" id="ld-out"></div></section>
+      <section class="block"><h3>安全区 /layout/safe-area</h3>
+        <div class="form-row"><label class="f">margin（留空按画布比例）<input id="ls-margin" type="number" step="any" placeholder="比例值"></label>
+        <button class="act" id="ls-run">检查</button></div><div class="out" id="ls-out"></div></section>
+      <section class="block"><h3>栅格吸附 /layout/grid-snap</h3>
+        <div class="form-row"><label class="f">列<input id="lg-cols" type="number" value="12" min="1"></label>
+        <label class="f">行<input id="lg-rows" type="number" value="12" min="1"></label>
+        <label class="f">模式<select id="lg-mode"><option>cell_center</option><option>cell_top_left</option></select></label>
+        <button class="act" id="lg-run">吸附</button></div><div class="out" id="lg-out"></div></section>
+      <section class="block"><h3>综合体检 /layout/analyze</h3>
+        <div class="form-row"><button class="act" id="lz-run">分析</button></div><div class="out" id="lz-out"></div></section>
+      <section class="block"><h3>设计对比 /design/compare（六类结构化 diff）</h3>
+        <label class="f">before（JSON 数组）<textarea id="cp-before" rows="3">[{"id": "a", "x": 0, "y": 0}]</textarea></label>
+        <label class="f">after（JSON 数组）<textarea id="cp-after" rows="3">[{"id": "a", "x": 5, "y": 0}, {"id": "b", "x": 9}]</textarea></label>
+        <div class="form-row"><label class="f">compare_keys（逗号分隔，可选）<input id="cp-keys" type="text" placeholder="如 x,y"></label>
+        <button class="act" id="cp-run">对比</button></div><div class="out" id="cp-out"></div></section>
+      <section class="block"><h3>去背景 /generate/remove-background（服务端磁盘真实图像路径）</h3>
+        <div class="form-row"><label class="f">图像路径<input id="bgrm-path" class="wide" type="text" placeholder="例如 D:\images\logo.png"></label>
+        <label class="f">阈值 0-255<input id="bgrm-thr" type="number" value="32" min="0" max="255"></label>
+        <label class="f">输出路径（可选）<input id="bgrm-out" class="wide" type="text"></label>
+        <button class="act" id="bgrm-run">去除</button></div><div class="out" id="bgrm-out-box"></div></section>
+    </div>
+  </section>
+
+  <!-- ======================= 品牌智能 ======================= -->
+  <section id="panel-brand" class="panel">
+    <h2>品牌智能 · /api/v1/brand/*</h2>
+    <div class="grid2">
+      <section class="block"><h3>调色板提取 /brand/palette</h3>
+        <div class="form-row"><label class="f">图像路径（服务端磁盘真实文件）<input id="bpal-path" class="wide" type="text" placeholder="例如 D:\brand\pack.png"></label>
+        <label class="f">k<input id="bpal-k" type="number" value="6" min="2" max="32"></label>
+        <button class="act" id="bpal-run">提取</button></div><div class="out" id="bpal-out"></div></section>
+      <section class="block"><h3>品牌色一致性 /brand/color-consistency</h3>
+        <div class="form-row"><label class="f">品牌色（逗号分隔 hex）<input id="bcons-hexes" class="wide" type="text" value="#2E7D46,#1B3A6B"></label>
+        <label class="f">图像路径<input id="bcons-path" class="wide" type="text"></label></div>
+        <div class="form-row"><label class="f">max_delta_e<input id="bcons-de" type="number" value="3" step="any"></label>
+        <label class="f">k<input id="bcons-k" type="number" value="8" min="1" max="32"></label>
+        <button class="act" id="bcons-run">检查</button></div><div class="out" id="bcons-out"></div></section>
+      <section class="block"><h3>Logo 几何 /brand/logo-geometry（alpha 包围盒/留白/占比）</h3>
+        <div class="form-row"><label class="f">图像路径<input id="blogo-path" class="wide" type="text"></label>
+        <label class="f">alpha 阈值<input id="blogo-thr" type="number" value="8" min="0"></label>
+        <button class="act" id="blogo-run">分析</button></div><div class="out" id="blogo-out"></div></section>
+      <section class="block"><h3>品牌语义识别 /brand/semantic-insight（POST，Phase 70 真实透传）</h3>
+        <div class="form-row"><label class="f">图像路径（服务端磁盘真实文件）<input id="bsem-path" class="wide" type="text" placeholder="例如 D:\brand\logo.png"></label>
+        <label class="f">provider_id（可选，留空用已配置 Provider）<input id="bsem-provider" type="text" size="12"></label></div>
+        <div class="form-row"><label class="f">prompt（可选，追加给视觉模型的指令）<textarea id="bsem-prompt" rows="2" placeholder="留空即用服务端缺省提示"></textarea></label>
+        <button class="act" id="bsem-run">真实识别</button></div>
+        <div id="bsem-boundary" class="small muted">读取服务端边界声明中…</div>
+        <div class="out" id="bsem-out"><span class="muted">点击「真实识别」后显示模型逐字输出。</span></div></section>
+    </div>
+  </section>
+
+  <!-- ======================= 印前检查 ======================= -->
+  <section id="panel-print" class="panel">
+    <h2>印前检查 · /api/v1/preflight/* · VDP · 面板识别</h2>
+    <div class="grid2">
+      <section class="block"><h3>印前体检 /preflight</h3>
+        <div class="form-row"><label class="f">文档路径（服务端磁盘真实文件）<input id="pf-path" class="wide" type="text" placeholder="例如 D:\print\art.pdf"></label>
+        <button class="act" id="pf-run">检查</button></div><div class="out" id="pf-out"></div></section>
+      <section class="block"><h3>自动修复 /preflight/auto-fix</h3>
+        <div class="form-row"><label class="f">文档路径<input id="af-path" class="wide" type="text"></label>
+        <button class="act" id="af-run">修复</button></div><div class="out" id="af-out"></div></section>
+      <section class="block"><h3>检查历史 /preflight/history（GET）</h3>
+        <div class="form-row"><label class="f">limit<input id="ph-limit" type="number" value="10" min="1"></label>
+        <button class="act" id="ph-run">拉取</button></div><div class="out" id="ph-out"></div></section>
+      <section class="block"><h3>VDP 变量合并 /packaging/vdp/merge（真实读 CSV/Excel）</h3>
+        <div class="form-row"><label class="f">数据源路径<input id="vd-source" class="wide" type="text" placeholder="例如 D:\data\labels.csv"></label>
+        <label class="f">field_map（JSON，可选）<input id="vd-map" type="text" placeholder='{"名称":"title"}'></label>
+        <label class="f">limit<input id="vd-limit" type="number" placeholder="全部"></label>
+        <button class="act" id="vd-run">合并</button></div><div class="out" id="vd-out"></div></section>
+      <section class="block"><h3>刀版面板识别 /packaging/panel-recognition</h3>
+        <div class="form-row"><label class="f">图像路径<input id="pr-path" class="wide" type="text"></label>
+        <button class="act" id="pr-run">识别</button></div>
+        <div class="out" id="pr-out"><span class="muted">Phase 47 真实交付：服务端对位图刀版做确定性几何反解（Otsu 二值化 + 轴对齐线抽取 + 连通域），回面板矩形/面积、cut-fold 线型、邻接与外轮廓长；零 CV/ML 模型，无墨或线未闭合如实报空、不臆造型。边界：轴对齐矩形刀版，斜角与曲线不在能力内。</span></div></section>
+    </div>
+  </section>
+
+  <!-- ======================= 知识库 ======================= -->
+  <section id="panel-knowledge" class="panel">
+    <h2>知识库 · /api/v1/knowledge</h2>
+    <div class="grid2">
+      <section class="block"><h3>全库列表 /knowledge（GET · 打开面板自动加载）</h3>
+        <div class="form-row"><button class="ghost" id="kl-run">刷新列表</button></div>
+        <div class="out" id="kl-out"></div></section>
+      <section class="block"><h3>入库 /knowledge/ingest</h3>
+        <div class="form-row"><label class="f">文件路径（服务端磁盘真实文件）<input id="ki-path" class="wide" type="text"></label>
+        <label class="f">标题<input id="ki-title" type="text"></label></div>
+        <div class="form-row"><label class="f">作用域<select id="ki-scope"><option>project</option><option>global</option><option>workspace</option><option>brand</option><option>private</option></select></label>
+        <label class="f">标签（逗号分隔）<input id="ki-tags" type="text"></label>
+        <button class="act" id="ki-run">入库</button></div><div class="out" id="ki-out"></div></section>
+      <section class="block"><h3>语义检索 /knowledge/retrieve（向量命中为真，未命中不伪造）</h3>
+        <div class="form-row"><label class="f">查询<input id="kr-query" class="wide" type="text" placeholder="例如：咖啡品牌配色规范"></label>
+        <label class="f">top_k<input id="kr-k" type="number" value="5" min="1"></label>
+        <label class="f">作用域（逗号，可选）<input id="kr-scopes" type="text"></label>
+        <button class="act" id="kr-run">检索</button></div><div class="out" id="kr-out"></div></section>
+      <section class="block"><h3>单项 /knowledge/{item_id}</h3>
+        <div class="form-row"><label class="f">item_id<input id="ks-id" class="wide" type="text" placeholder="从列表或检索结果复制"></label>
+        <button class="ghost" id="ks-get">查看（GET）</button>
+        <button class="ghost" id="ks-del">删除（DELETE · 真实移除）</button></div>
+        <div class="out" id="ks-out"></div></section>
+    </div>
+  </section>
+
+  <!-- ======================= 改稿评审 ======================= -->
+  <section id="panel-revision" class="panel">
+    <h2>客户改稿与设计评审 · /api/v1/revision · /review</h2>
+    <div class="grid2">
+      <section class="block"><h3>对象集合（解析/应用/评审共用）</h3>
+        <label class="f">objects（JSON 数组）<textarea id="rv-objs" rows="6">[
+  {"id": "标题", "x": 10, "y": 10, "width": 100, "height": 30, "fill_color": "#FF0000"}
+]</textarea></label>
+        <label class="f">受保护对象 id 列表（JSON 数组，如 ["标题"]）<textarea id="rv-protected" rows="2">[]</textarea></label>
+      </section>
+      <section class="block"><h3>改稿解析 /revision/parse（歧义必标 needs_clarification，从不猜测）</h3>
+        <div class="form-row"><label class="f">客户意见<input id="rp-text" class="wide" type="text" value="把标题改成深红色 #8B0000"></label>
+        <button class="act" id="rp-run">解析</button></div><div class="out" id="rp-out"></div></section>
+      <section class="block"><h3>改稿应用 /revision/apply（仅已批准条目真实改写并返回）</h3>
+        <label class="f">changes（JSON 数组，通常来自解析结果）<textarea id="ra-changes" rows="4">[]</textarea></label>
+        <div class="form-row"><label class="f">only_ids（逗号分隔，可选）<input id="ra-only" type="text"></label>
+        <button class="act" id="ra-run">应用</button></div><div class="out" id="ra-out"></div></section>
+      <section class="block"><h3>多角色设计评审 /review/run</h3>
+        <div class="form-row"><label class="f">画布（JSON，可选）<input id="rr-canvas" type="text" value='{"width": 300, "height": 200}'></label>
+        <label class="f">品牌主色板（逗号 hex → brand.palette）<input id="rr-brand" type="text"></label>
+        <label class="f">角色（逗号，可选）<input id="rr-roles" type="text"></label>
+        <button class="act" id="rr-run">评审</button></div><div class="out" id="rr-out"></div></section>
+    </div>
+  </section>
+
+  <!-- ======================= 运维运行时 ======================= -->
+  <section id="panel-ops" class="panel">
+    <h2>运维与运行时 · 真实只读端点</h2>
+        <details class="info-box info-fold"><summary>本面板全部为真实调用 · 只读端点服务端脱敏；冻结 EXE 上清单校验与编译核验如实 404，绝不伪造已通过</summary><div>本面板全部为真实调用：GET 只读端点返回值已由服务端脱敏（密钥仅掩码、渠道不含明文），未配置即如实显示未配置；诊断与自检逐端点原样呈现。Phase 49 起另含安装侧只读按钮，Phase 53 第二刀后共四枚：<b>安装清单静态校验</b>把 setup.iss 的逐条声明与磁盘实况对账（第 26 引擎，零写入零落盘），<b>安装态只读探测</b>逐项回显注册表卸载子键 / 开始菜单组 / 数据根 / 便携标记的真实观察值——installed 只由注册表卸载项真实命中派生，未安装即如实报未安装；<b>编译证据核验</b>把 installer\build-evidence.json 的每个数值与磁盘实读重算对账（证据自报的 compiled / fabricated 布尔不参与判定，只回显并标 ignored），判的是「产物是否真由当前脚本编译产出」；<b>安装预检·只读</b>按令牌 / 安装根候选 / 目标占用 / 可写性 / 产物 / 磁盘 / 载荷七路判「若要安装本机条件够不够」，默认不写盘，勾选 probe 才在允许根内的显式目标上真写探针。冻结 EXE 上清单校验与编译核验如实返回 404（构建期脚本与证据不随包分发，reason=<code>installer_script_not_found</code> 并回显 looked_in），预检拿不到 setup.iss 即如实报不可得，绝不伪造已通过或已证成；预检与编译核验的结论都不构成安装结果，也不构成安装态。</div></details>
+    <div class="form-row" id="ops-btns">
+      <button class="ghost" data-ops="/update/channels">更新渠道</button>
+      <button class="ghost" data-ops="/update/pending">待应用更新</button>
+      <button class="ghost" data-ops="/nas/targets">NAS 目标</button>
+      <button class="ghost" data-ops="/nas/cache">NAS 缓存</button>
+      <button class="ghost" data-ops="/provider">Provider 概览</button>
+      <button class="ghost" data-ops="/flags">功能开关</button>
+      <button class="ghost" data-ops="/tools">工具注册表</button>
+      <button class="ghost" data-ops="/skills">技能清单</button>
+      <button class="ghost" data-ops="/models">模型路由</button>
+      <button class="ghost" data-ops="/security/status">安全加固</button>
+      <button class="ghost" data-ops="/document">当前文档</button>
+      <button class="ghost" data-ops="/layers">图层清单</button>
+      <button class="ghost" data-ops="/events/recent?limit=50">事件总线</button>
+      <button class="ghost" data-ops="/config">配置概览</button>
+      <button class="ghost" data-ops="/uxp/bridge">UXP 桥接状态</button>
+      <button class="ghost" data-ops="/uxp/discovery">UXP 发现文件</button>
+      <button class="ghost" data-ops="/runtime/install-actions">安装执行域</button>
+      <button class="ghost" id="op-mf-verify">安装清单静态校验</button>
+      <button class="ghost" id="op-mf-state">安装态只读探测</button>
+      <button class="ghost" id="op-mf-artifact">编译证据核验（Phase 53）</button>
+      <button class="ghost" id="op-mf-preflight">安装预检·只读（Phase 53）</button>
+      <button class="ghost" data-ops="/tools/capability-map">宿主能力图</button>
+      <button class="ghost" data-ops="/eval/recommendations">评测建议</button>
+      <button class="ghost" data-ops="/typography/fallback-rules">字体回退规则</button>
+      <button class="ghost" data-ops="/typography/alias-map">字体别名映射</button>
+      <button class="ghost" id="op-diag">运行时守护诊断</button>
+      <button class="act" id="op-selftest">系统自检（POST /diagnostics/run）</button>
+      <button class="act" id="op-pchk-btn">端口可占用性真探测（Phase 65 接线）</button>
+    </div>
+    <div class="form-row"><label class="f">service_port（诊断用，真实 bind 检测）<input id="op-port" type="number" value="8765" min="1" max="65535"></label></div>
+    <div class="form-row">
+      <label class="f">port（必填，1~65535 整数字面）<input id="op-pchk-port" type="text" value="8765" size="10"></label>
+      <label class="f">host（留空=服务端缺省回环，不写死在前端）<input id="op-pchk-host" type="text" placeholder="可选，例如 127.0.0.1" size="18"></label>
+      <span class="muted small">POST 为进程级语义端点，不进只读按钮组：它真做一次 socket bind 试探随即释放。</span>
+    </div>
+    <div class="form-row"><label class="f">script_path（清单校验 / 编译核验 / 预检共用，留空即由服务端按构建目录自行发现；只读，服务端会拒绝越界与黑名单路径）<input id="mf-path" type="text" size="52" placeholder="例如 C:\path\to\setup.iss"></label></div>
+    <div class="form-row"><label class="f">evidence_path（installer\build-evidence.json，留空即自行发现；冻结包不随包分发构建期工件，缺即如实 404）<input id="mf-ev-path" type="text" size="52" placeholder="例如 C:\path\to\installer\build-evidence.json"></label></div>
+    <div class="form-row"><label class="f">target_override（仅预检用：写探针的唯一可落盘目标，必须落在本产品允许根内，越界一律 403；留空即纯只读不写盘）<input id="mf-override" type="text" size="42" placeholder="例如 %LOCALAPPDATA%\Zaojing\preflight-probe"></label><label class="f">probe<input id="mf-probe" type="checkbox"></label><span class="muted small">勾选 probe 才会真落写探针（写→读回比对→删除），未勾选时该项报 write_probe_unprobed 而非「不可写」。</span></div>
+    <div class="out" id="ops-out"><span class="muted">点击任意按钮即以真实请求调用对应端点并原样呈现响应。</span></div>
+    <h3>安装执行台账 · GET /installer/execution（只读对账，Phase 70）</h3>
+    <div class="small muted">只读取服务数据根下的 execution-evidence.json 并拿现场重算：制品 sha 三方相等、日志 sha 不变、安装根/卸载项/应用键的存在性与台账「之后」的说法吻合、既有数据逐字节完好。台账自报的 installed/performed/status 只回显不作判定（判据 basis 恒为磁盘与注册表现场派生）。真装/真卸结构上只经同一可执行文件的 CLI 子命令带显式同意令牌可达——本界面没有、也不该有触发执行的按钮。</div>
+    <div class="form-row"><button class="act" id="iex-run">只读对账</button></div>
+    <div class="out" id="iex-out"></div>
+    <h3>运行时上锁 · POST /runtime/single-instance（Phase 71 接线）</h3>
+    <div class="info-box">进程级语义端点（与本页端口探测同条归位）：真获取/释放本机命名互斥体与锁文件，回执 <code>backend=kernel32-named-mutex</code>，schema/acquired/backend 逐字段原样回显，<code>fabricated</code> 恒 false。本卡点击即 acquire 并随即 release——探测即归还，不给您滞留一把锁；非法 action 服务端如实 400。</div>
+    <div class="form-row">
+      <label class="f">name（互斥体名，留空=控制台缺省名）<input id="nsl-name" type="text" placeholder="zaojing-console-lock" size="30"></label>
+      <button class="act" id="nsl-run">上锁探测（acquire→release）</button>
+    </div>
+    <div class="out" id="nsl-out"><span class="muted">显式点击才发请求；获取与释放两侧回执均原样呈现，不合并不美化。</span></div>
+    <h3>UXP 宿主桥诊断 · handshake / poll / dispatch / result（Phase 71 接线）</h3>
+        <details class="info-box info-fold"><summary>四动作各一枚按钮 · 无 Adobe 宿主时诚实 502 三形逐一认出 · token 由您从本机发现文件粘贴</summary><div>本卡是宿主桥四枚端点的真实调用面：<code>handshake</code> 登记 UXP 宿主（session token 由您从本机发现文件粘贴——明文只经本地文件与本输入框传递，服务端回执里的 session 恒为掩码形如 <code>CNW****Zse8</code>）；<code>poll</code> 是宿主侧队列的读腿，无命令时如实回 <code>{status:ok, commands:[], count:0}</code> 并显示「无待执行命令」；<code>dispatch</code> 向已连接宿主派发真桥接工具（本卡固定 <code>ps.document.get</code>，写入宿主桥队列并等 Adobe 真执行）；<code>result</code> 上报回执，未知 request_id 如实回报 <code>unknown_request</code>。<b>没有宿主在场时它们不靠假成功表态</b>：502 的 <code>detail</code> 里带 status（auth_failed / no_host_connected / capability_not_negotiated）与 <code>fabricated:false</code>，本界面逐形认出并原样呈现，绝不绘制假文档、假命令或假回执。</div></details>
+    <div class="form-row">
+      <label class="f grow">session token（本机发现文件里的明文，仅经本机传递）<input id="uxp-token" type="text" placeholder="粘贴 uxp discovery 的 session_token" size="34"></label>
+    </div>
+    <div class="form-row">
+      <button class="act" id="uxp-hand">握手登记（POST /uxp/handshake）</button>
+      <button class="act" id="uxp-poll">拉取命令（POST /uxp/poll）</button>
+      <button class="act" id="uxp-disp">派发工具（POST /uxp/dispatch）</button>
+      <button class="act" id="uxp-res">上报回执（POST /uxp/result）</button>
+    </div>
+    <div class="out" id="uxp-out"><span class="muted">显式点击才发请求；poll 为长轮询读腿（短超时后如实返回空命令集）。运维面板上方「UXP 桥接状态 / UXP 发现文件」两枚只读按钮可先确认服务端侧的登记与发现形制。</span></div>
+  </section>
+
+  <!-- ======================= 流程与恢复（Phase 40） ======================= -->
+  <section id="panel-flow" class="panel">
+    <h2>工作流 · 批量处理 · 快照与恢复 · 真实端点</h2>
+    <div class="info-box">本面板全部为真实调用：工作流定义→校验→可视化→执行→实例查询为同一条状态链（id 由服务返回并自动回填）；工具清单由服务端 tool_registry <b>实时派生</b>（逐工具的参数契约取自其绑定的请求模型/协程签名，Phase 51，不存在第二份手写清单）；快照对真实存在的文件做字节级备份（SHA-256），还原真把字节写回磁盘；不存在的文档如实标记不可恢复，绝不伪造。</div>
+
+    <h3>工作流引擎</h3>
+    <div class="form-row"><label class="f grow">工作流定义 JSON（nodes/edges/variables）<textarea id="wf-def" rows="8" spellcheck="false"></textarea></label></div>
+    <div class="form-row">
+      <button class="ghost" id="wf-sample">填入示例（input→output）</button>
+      <button class="act" id="wf-define">定义（POST /workflow/define）</button>
+    </div>
+    <div class="form-row">
+      <label class="f">workflow_id（定义成功后自动回填）<input id="wf-id" type="text" placeholder="p40demo"></label>
+      <label class="f">input_data JSON（执行用）<input id="wf-input" type="text" value='{"greet":"hello"}'></label>
+      <button class="act" id="wf-validate">校验（GET /workflow/{id}/validate）</button>
+      <button class="act" id="wf-visualize">可视化（GET /workflow/{id}/visualize）</button>
+      <button class="act" id="wf-execute">执行（POST /workflow/{id}/execute）</button>
+    </div>
+    <div class="form-row"><label class="f">instance_id（执行后自动回填）<input id="wf-inst" type="text" placeholder="执行后回填"></label><button class="act" id="wf-instance">查实例（GET /workflow/instance/{id}）</button></div>
+    <div class="form-row">
+      <label class="f">工具名过滤（留空显示全部）<input id="wf-tools-q" type="text" placeholder="dieline"></label>
+      <button class="act" id="wf-tools">工具清单（GET /workflow/tools）</button>
+    </div>
+    <div class="out" id="wf-out"><span class="muted">定义/校验/可视化/执行/实例的结果显示在这里。</span></div>
+    <div class="out" id="wf-tools-out"><span class="muted">工具清单由服务端 tool_registry 实时派生：Tool 节点真正能调用什么，以这里为准。</span></div>
+
+    <h3>批量处理</h3>
+    <div class="form-row">
+      <label class="f grow">文件路径（每行一个）<textarea id="bt-files" rows="4" placeholder="C:\path\to\file.png"></textarea></label>
+      <label class="f">operation<select id="bt-op"><option value="preflight">preflight</option><option value="import_asset">import_asset</option><option value="remove_background">remove_background</option></select></label>
+      <label class="f">workers<input id="bt-workers" type="number" value="4" min="1" max="16"></label>
+      <button class="act" id="bt-run">并发批处理（POST /batch/process）</button>
+    </div>
+    <div class="out" id="bt-out"><span class="muted">聚合计数与逐文件真实耗时结果显示在这里。</span></div>
+
+    <h3>快照与恢复</h3>
+    <div class="form-row">
+      <label class="f grow">document_path（真实存在的文件→字节备份+SHA256；不存在→如实不可恢复）<input id="sn-path" type="text" placeholder="C:\path\to\doc.psd"></label>
+      <label class="f">snapshot_type<select id="sn-type"><option value="full">full</option><option value="incremental">incremental</option></select></label>
+      <button class="act" id="sn-create">创建快照（POST /recovery/snapshot）</button>
+      <button class="act" id="sn-list">快照列表（GET /recovery/snapshots）</button>
+    </div>
+    <div class="form-row">
+      <label class="f">snapshot_id（创建后自动回填）<input id="sn-id" type="text" placeholder="创建后回填"></label>
+      <button class="act" id="sn-restore">还原（POST /recovery/snapshot/{id}/restore，真实写回磁盘）</button>
+    </div>
+    <div class="out" id="sn-out"><span class="muted">快照与还原结果显示在这里。</span></div>
+
+    <h3>事务与任务恢复</h3>
+    <div class="form-row">
+      <label class="f">task_id<input id="tx-task" type="text" placeholder="my-task-1"></label>
+      <label class="f grow">document_path（可空）<input id="tx-doc" type="text"></label>
+      <button class="act" id="tx-begin">开启事务（POST /recovery/transaction/begin）</button>
+      <label class="f">transaction_id（自动回填）<input id="tx-id" type="text"></label>
+      <button class="act" id="tx-commit">提交（POST …/commit）</button>
+      <button class="ghost" id="tx-rollback">回滚（POST …/rollback）</button>
+    </div>
+    <div class="form-row">
+      <label class="f">注册任务 task_id<input id="tk-id" type="text" placeholder="task-1"></label>
+      <label class="f">total_steps<input id="tk-steps" type="number" value="3" min="1"></label>
+      <button class="act" id="tk-register">注册（POST /recovery/task/register）</button>
+      <label class="f">current_step<input id="tk-step" type="number" value="1" min="0"></label>
+      <button class="ghost" id="tk-progress">上报进度</button>
+      <button class="ghost" id="tk-complete">完成任务</button>
+      <button class="ghost" id="tk-fail">标记失败</button>
+    </div>
+    <div class="form-row">
+      <button class="act" id="tk-report">恢复报告（GET /recovery/task/{id}/report）</button>
+      <button class="act" id="tk-orphaned">悬空任务扫描（GET /recovery/tasks/orphaned）</button>
+    </div>
+    <div class="out" id="tk-out"><span class="muted">事务与任务生命周期结果显示在这里。</span></div>
+  </section>
+
+  <!-- ======================= 实体明细联查（Phase 42） ======================= -->
+  <section id="panel-detail" class="panel">
+    <h2>实体明细联查 · 按 id 只读深挖（评测报告 / 知识 / 素材 / 技能 / 开关 / 字体）</h2>
+    <div class="info-box">本面板 8 个端点已由 Phase 42 探针实测确认零磁盘副作用（每发前后数据根全树哈希快照 diff 为空），幽灵 id 一律诚实 404 原样呈现。<code>typography/resolve</code> 与 <code>tools/capability-report</code> 在 Phase 42 曾因实证存在落盘副作用而<b>不入本只读面板</b>；自 Phase 45 起它们以显式用户动作形式归入"配置与写操作"面板（副作用即其设计意图，浏览本页仍绝不发写请求）（宁缺毋伪）。id 可从其余面板的真实列表结果中复制。</div>
+    <div class="form-row">
+      <label class="f grow">report_id（评估中心"刷新报告列表"可得）<input id="dt-report" type="text" placeholder="eval-YYYYMMDD-HHMMSS-xxxxxx"></label>
+      <button class="act" id="dt-report-btn">报告详情（GET /eval/reports/{id}）</button>
+    </div>
+    <div class="form-row">
+      <label class="f">报告 A<input id="dt-cmp-a" type="text"></label>
+      <label class="f">报告 B<input id="dt-cmp-b" type="text"></label>
+      <button class="act" id="dt-cmp-btn">对比两报告（POST /eval/compare）</button>
+      <button class="ghost" id="dt-cmp-run2">先连跑两次评测再对比最新两份</button>
+    </div>
+    <div class="out" id="dt-eval-out"><span class="muted">评测报告详情与逐项对比（pass_rate_delta / flips / regressed / improved）显示在这里。</span></div>
+    <div class="form-row">
+      <label class="f">知识条目 id（知识库面板可得）<input id="dt-kn" type="text" placeholder="kb_xxxx"></label>
+      <button class="act" id="dt-kn-btn">查知识条目（GET /knowledge/{id}）</button>
+    </div>
+    <div class="form-row">
+      <label class="f">素材 id（素材库面板可得）<input id="dt-as" type="text"></label>
+      <button class="act" id="dt-as-btn">查素材实体（GET /assets/{id}）</button>
+    </div>
+    <div class="out" id="dt-lib-out"><span class="muted">知识与素材实体结果显示在这里。</span></div>
+    <div class="form-row">
+      <label class="f">skill_id（运维面板"技能清单"可得）<input id="dt-sk" type="text"></label>
+      <button class="act" id="dt-sk-btn">查技能定义（GET /skills/{id}）</button>
+      <button class="act" id="dt-sk-val">静态校验（POST /skills/{id}/validate）</button>
+    </div>
+    <div class="form-row">
+      <label class="f">flag key<input id="dt-flag" type="text" value="webp_preview_enabled"></label>
+      <button class="act" id="dt-flag-btn">查单个开关（GET /flags/{key}）</button>
+    </div>
+    <div class="form-row">
+      <label class="f">字体 ref（字体排版面板"列出"可得）<input id="dt-font" type="text"></label>
+      <button class="act" id="dt-font-btn">查字体明细（GET /typography/fonts/{ref}）</button>
+    </div>
+    <div class="out" id="dt-ops-out"><span class="muted">技能、开关与字体明细结果显示在这里。</span></div>
+  </section>
+
+  <section id="panel-write" class="panel">
+    <h2>配置与写操作 · 显式用户动作写入本地数据根（Phase 45）</h2>
+        <details class="info-box info-fold"><summary>写侧只在点击时发生 · 敌意载荷一律 4xx · 八枚留守项已于 Phase 71 全量归位，副作用边界逐名在册</summary><div>本面板写侧端点由 Phase 45 探针实证：合法载荷真实响应、敌意/缺失载荷一律 4xx（绝不裸 5xx）、落盘副作用仅发生于本服务自己的数据根且快照 diff 可证。副作用是这些端点的设计意图——只在您点击按钮时发生，本面板加载与浏览绝不自动发写请求。<b>Phase 48 归位</b>：<code>generate</code>、<code>plan</code>、<code>provider/chat</code>、<code>provider/images</code> 四条生成类端点自"需真实 Provider 后端故不接线"的旧理由中移出，接入本页下方"AI 生成"区——未配置后端时它们如实返回 502 <code>no_provider_configured</code>（<code>fabricated:false</code> 原文呈现），本界面绝不因此绘制假图或假计划；素材缩略图 <code>GET /assets/{id}/thumbnail</code> 是浏览器发出的真实 HTTP 二进制请求，已归位于素材库面板（见该页说明）。<b>Phase 65 归位</b>：旧理由里「需真实可达共享」的 <code>nas/connect · list · lock · reconnect</code> 四枚，与「进程级语义」的 <code>runtime/port-check</code>、「需图层文档语境」的 <code>layers</code> PATCH/DELETE 一并移出留守名单接入本面板（图层区见本页下方，端口探测见运维面板）——它们的副作用经探针实证只在各自的能力面内发生：NAS 四枚零落盘（只读探测/枚举/锁试探/退避重连，唯一的写盘腿 download 仍留守），port-check 真 bind 随即释放，图层两枚只改本服务数据根内的 <code>state/document.json</code>。诚实性前提是它们都<b>不靠 HTTP 码表态</b>：NAS 恒回 200 而把结论放在 <code>status</code> 里，本面板据此着色并原样回显 <code>reason</code>／<code>note</code> 原文。<b>Phase 71 归位（接线收尾：八枚留守项全量接入，理由逐名改写为边界逐名在册）</b>：旧理由里「副作用越出数据根」的 <code>nas/download</code> 接在本面板 NAS 区下方——落盘目录 <code>dest_dir</code> 由您显式给定（这正是该端点的设计意图，界面不替您挑目录），越出沙箱根的 subpath 被服务端拒绝并如实回 <code>forbidden</code> 且零落盘；<code>update/download</code> 与 <code>update/apply</code> 接在本面板更新区下方——前者真外网下载并校验 SHA-256（未配渠道诚实 <code>no_update_configured</code>），后者是 L3 级替换动作，按钮在发出请求前必须连过两道 confirm，sha 不符时服务端回滚、目标逐字节不被改坏，而替换应用自身的正式升级仍走安装器；<code>runtime/single-instance</code> 与宿主桥四枚 <code>uxp/handshake</code>、<code>uxp/poll</code>、<code>uxp/dispatch</code>、<code>uxp/result</code> 接在运维面板——前者 acquire 后随即 release，不给您滞留一把锁；后者无 Adobe 宿主在场时不靠假成功表态，502 的 detail 里 <code>auth_failed</code> / <code>no_host_connected</code> / <code>capability_not_negotiated</code> 逐形认出、<code>fabricated:false</code> 原文呈现，界面绝不绘制假文档或假命令，握手 token 由您从本机发现文件粘贴且服务端回执恒脱敏。本面板与运维面板写侧留守项至此清零；<b>覆盖数以本页「接线报告」区实时派生为准，本段文案不自报数字</b>。<b>Phase 70 归位</b>：<code>brand/semantic-insight</code> 与 <code>installer/execution</code> 两枚自留守名单移出——品牌语义接在品牌面板，<b>显式点击才</b>向已配置 Provider 发起真实外网请求，未配置时服务端如实 502 <code>needs_external</code>（<code>fabricated:false</code>，界面绝不绘制臆造关键词或置信度），边界由 <code>GET /brand/semantics</code> 的 <code>provider_configured</code> 现场派生而非写死；安装台账接在运维面板，只读取数并由服务端现场重算，五形制（ledger_absent / executed_verified / install_verified_awaiting_uninstall / ledger_unverified / ledger_inconsistent）逐名回显，<b>不带任何触发真装真卸的按钮</b>——执行动作结构上仍只经同一可执行文件的 CLI 子命令带显式同意令牌可达。</div></details>
+    <div class="form-row">
+      <label class="f">配置键<input id="wr-cfg-key" type="text" placeholder="例如 ui.last_project"></label>
+      <label class="f grow">值（JSON 或字符串）<input id="wr-cfg-val" type="text" value="&quot;p45-console&quot;"></label>
+      <button class="act" id="wr-cfg-btn">写入配置（PUT /config/{key}）</button>
+    </div>
+    <div class="out" id="wr-cfg-out"><span class="muted">写入后返回合并后的全量配置视图，原样呈现。</span></div>
+    <div class="form-row">
+      <label class="f">provider_id<input id="wr-pv-id" type="text" placeholder="my-provider"></label>
+      <label class="f grow">base_url<input id="wr-pv-url" type="text" placeholder="https://api.example.com/v1"></label>
+      <label class="f">api_key（DPAPI 加密落盘，视图永不回显明文）<input id="wr-pv-key" type="password"></label>
+      <label class="f">model<input id="wr-pv-model" type="text" placeholder="可选"></label>
+    </div>
+    <div class="form-row">
+      <button class="act" id="wr-pv-cfg-btn">保存 Provider 配置（POST /provider/configure）</button>
+      <button class="act" id="wr-pv-health-btn">健康探测（POST /provider/health）</button>
+    </div>
+    <div class="out" id="wr-pv-out"><span class="muted">配置返回脱敏视图（api_key_masked）；未配置/不可达时健康探测诚实返回 unreachable。</span></div>
+    <div class="form-row">
+      <label class="f">target_id<input id="wr-nas-id" type="text" placeholder="nas-a"></label>
+      <label class="f grow">target（路径/映射盘/UNC 或 WebDAV URL）<input id="wr-nas-target" type="text"></label>
+      <label class="f">kind<select id="wr-nas-kind"><option>filesystem</option><option>webdav</option></select></label>
+      <label class="f grow">share_root（沙箱根，可空）<input id="wr-nas-root" type="text"></label>
+    </div>
+    <div class="form-row">
+      <button class="act" id="wr-nas-cfg-btn">注册目标（POST /nas/configure）</button>
+      <button class="act" id="wr-nas-forget-btn">遗忘目标（POST /nas/forget）</button>
+      <button class="ghost" id="wr-nas-clear-btn">清空磁盘缓存（POST /nas/cache/clear）</button>
+    </div>
+    <div class="form-row">
+      <label class="f">subpath（相对沙箱根；枚举可空，锁文件必填）<input id="wr-nas-sub" type="text" placeholder="例如 design.psd" size="22"></label>
+      <label class="f">timeout 秒（留空=服务端缺省）<input id="wr-nas-timeout" type="text" placeholder="可选" size="8"></label>
+      <label class="f">use_cache<select id="wr-nas-cache"><option value="false">false</option><option value="true">true</option></select></label>
+      <label class="f">attempts（重连次数，留空=服务端缺省 3）<input id="wr-nas-attempts" type="text" placeholder="可选" size="8"></label>
+    </div>
+    <div class="form-row">
+      <button class="act" id="wr-nas-conn-btn">可达性真探测（Phase 65 接线）</button>
+      <button class="act" id="wr-nas-list-btn">目录真枚举（Phase 65 接线）</button>
+      <button class="act" id="wr-nas-lock-btn">文件占用真检测（Phase 65 接线）</button>
+      <button class="act" id="wr-nas-reconn-btn">断线重连（Phase 65 接线）</button>
+    </div>
+    <div class="out" id="wr-nas-out"><span class="muted">注册/遗忘仅改写本服务数据根内 nas 配置；缓存清空返回真实清除条数。Phase 65 新增的四枚为实探面：HTTP 恒 200，结论只在 status 里（connected / ok / not_configured / unreachable / forbidden / not_supported_for_webdav），故徽标按 status 着色而非 HTTP 码。</span></div>
+    <h3>NAS 文件下载 · POST /nas/download（Phase 71 接线）</h3>
+    <div class="info-box">八枚留守项里唯一的写盘腿归位。副作用落点由<b>您显式给定的 <code>dest_dir</code></b> 决定（这是该端点的设计意图，界面不替您挑目录）；服务端拒收越出沙箱根的 <code>subpath</code>——越界时 HTTP 仍回 200 而把结论写进 <code>status:"forbidden"</code> 且 <code>downloaded:false</code>，本机<b>一个字节都不落</b>；未知 target 如实 <code>not_configured</code>。成功回执里的 sha256 与字节数为服务端真实计算值。本卡加载与浏览绝不自动发请求。</div>
+    <div class="form-row">
+      <label class="f">target_id（上方注册或运维面板 NAS 目标可得）<input id="nasd-tid" type="text" size="18" placeholder="nas-a"></label>
+      <label class="f grow">subpath（相对沙箱根）<input id="nasd-sub" type="text" placeholder="例如 design.psd"></label>
+      <label class="f grow">dest_dir（本机落盘目录，必填）<input id="nasd-dest" type="text" placeholder="例如 D:\nas-downloads"></label>
+      <button class="act" id="nasd-run">下载（显式点击）</button>
+    </div>
+    <div class="out" id="nasd-out"><span class="muted">徽标按 status 着色：downloaded 绿 / forbidden 与 not_configured 红 / 其余黄；reason、note 原文回显，缺字段不臆造。</span></div>
+    <h3>图层改写与删除 · L3 门禁须显式勾选（Phase 65 接线）</h3>
+    <div class="info-box">PATCH 只提交您<b>填过</b>的字段（服务端按「字段为 null 即不改」派生补丁），五格全空时本界面本地即拒绝、不发请求。DELETE 是 L3 不可逆操作：服务端要求逐字 <code>confirm=true</code>，未勾选下方复选框时本界面连请求都不发——这道门在 Phase 65 之前只是文档承诺，实测未兑现（缺陷 P65-D1），现已由服务端补成与安装执行面同口径的真门禁。</div>
+    <div class="form-row">
+      <label class="f">layer_id（图层清单面板可得）<input id="wr-ly-id" type="text" placeholder="例如 a1b2c3d4"></label>
+      <label class="f">name<input id="wr-ly-name" type="text" placeholder="留空=不改"></label>
+      <label class="f">opacity<input id="wr-ly-opacity" type="text" placeholder="留空=不改" size="8"></label>
+      <label class="f">visible<select id="wr-ly-visible"><option value="">不改</option><option value="true">true</option><option value="false">false</option></select></label>
+      <label class="f">locked<select id="wr-ly-locked"><option value="">不改</option><option value="true">true</option><option value="false">false</option></select></label>
+      <label class="f">blend_mode<select id="wr-ly-blend"><option value="">不改</option><option>normal</option><option>multiply</option><option>screen</option><option>overlay</option></select></label>
+    </div>
+    <div class="form-row">
+      <button class="act" id="wr-ly-patch-btn">改写图层（Phase 65 接线）</button>
+      <label class="f"><input id="wr-ly-confirm" type="checkbox"> 确认删除该图层（L3 不可逆）</label>
+      <button class="act" id="wr-ly-del-btn">删除图层（Phase 65 接线）</button>
+    </div>
+    <div class="out" id="wr-ly-out"><span class="muted">图层 id 不存在时如实 404 并给出服务端原文，绝不静默新建；删除成功后可在运维面板「图层清单」复核该 id 确已消失。</span></div>
+    <div class="form-row">
+      <label class="f">channel<select id="wr-uc-chan"><option>dev</option><option>beta</option><option>stable</option></select></label>
+      <label class="f grow">feed_url<input id="wr-uc-feed" type="text" placeholder="https://example.invalid/manifest.json"></label>
+      <label class="f">secret（HMAC 签名密钥，不回显）<input id="wr-uc-secret" type="password"></label>
+      <label class="f">current_version<input id="wr-uc-ver" type="text" value="1.0.0"></label>
+    </div>
+    <div class="form-row">
+      <button class="act" id="wr-uc-btn">配置更新渠道（POST /update/configure）</button>
+      <button class="act" id="wr-ck-btn">检查更新（POST /update/check）</button>
+    </div>
+    <div class="out" id="wr-uc-out"><span class="muted">configure 仅回 has_secret 布尔、绝不回显密钥；check 未配置/不可达如实返回 no_update_configured / feed_unreachable。</span></div>
+    <h3>更新暂存下载与原子应用 · POST /update/download + /update/apply（Phase 71 接线）</h3>
+        <details class="info-box info-fold"><summary>download 真外网下载并校验 SHA-256 · apply 为 L3 级替换动作，界面上设两道 confirm</summary><div><code>/update/download</code> 按已配置渠道真下载制品到暂存目录并做 SHA-256 校验：未配置渠道时如实回 <code>no_update_configured</code> 且 <code>downloaded:false</code>（先在上方「配置更新渠道」填 feed_url）。<code>/update/apply</code> 把暂存包<b>原子替换</b>写进您指定的目标文件，是 L3 级不可由本界面撤销的动作，因此本卡的按钮在发出请求前必须连过<b>两道 confirm</b>；sha 不符时服务端拒绝并回滚（<code>integrity_failed</code>、<code>applied:false</code>，目标逐字节不被改坏），目标路径不存在如实 4xx。请把它用于您自己的暂存/测试目标；替换应用自身的正式升级仍走安装器（真装/真卸结构上只经同一可执行文件的 CLI 子命令带显式同意令牌可达，见运维面板的安装执行台账）。</div></details>
+    <div class="form-row">
+      <label class="f">channel<select id="upd-chan"><option>dev</option><option>beta</option><option>stable</option></select></label>
+      <button class="act" id="upd-dl">下载暂存（POST /update/download）</button>
+    </div>
+    <div class="form-row">
+      <label class="f grow">staged_path（上一步回执的真实暂存路径）<input id="upd-stg" type="text"></label>
+      <label class="f grow">target_path（要被替换的目标文件）<input id="upd-tgt" type="text"></label>
+      <label class="f">expected_sha256<input id="upd-sha" type="text" size="34" placeholder="暂存包 SHA-256"></label>
+      <button class="act" id="upd-apply">应用更新（双确认后发出）</button>
+    </div>
+    <div class="out" id="upd-out"><span class="muted">verified / downloaded / applied / integrity 逐字段回显；缺字段标注不臆造。</span></div>
+    <div class="form-row">
+      <label class="f grow">license_key（格式 ZAOJING.&lt;载荷&gt;.&lt;签名&gt;）<input id="wr-lic-key" type="text"></label>
+      <button class="act" id="wr-lic-btn">激活授权（POST /license/activate）</button>
+    </div>
+    <div class="out" id="wr-lic-out"><span class="muted">无效/过期/机器绑定不符一律如实 400 并给出 reason 原文，绝不假成功。</span></div>
+    <div class="form-row">
+      <label class="f">project<input id="wr-dv-proj" type="text" placeholder="my-brand-kit"></label>
+      <label class="f grow">files（JSON：类别→文件路径数组，路径为服务端本机可见路径）<textarea id="wr-dv-files" rows="3">{}</textarea></label>
+      <button class="act" id="wr-dv-btn">生成交付包（POST /delivery/package）</button>
+    </div>
+    <div class="out" id="wr-dv-out"><span class="muted">缺失文件如实 skip/included=0；返回真实归档路径、字节数与 sha256 清单。</span></div>
+    <div class="form-row">
+      <label class="f">missing（单个缺字字符）<input id="wr-tr-miss" type="text"></label>
+      <label class="f grow">text（上下文，可空）<input id="wr-tr-text" type="text"></label>
+      <button class="act" id="wr-tr-btn">字体回退解析（POST /typography/resolve）</button>
+    </div>
+    <div class="out" id="wr-tr-out"><span class="muted">该端点会真实学习并落盘回退规则（设计意图）；候选为机器相关，不预设数量。</span></div>
+    <div class="form-row">
+      <label class="f">host（自报宿主名）<input id="wr-cr-host" type="text"></label>
+      <label class="f grow">capabilities（JSON：能力名→布尔）<textarea id="wr-cr-caps" rows="2">{}</textarea></label>
+      <button class="act" id="wr-cr-btn">上报宿主能力（POST /tools/capability-report）</button>
+    </div>
+    <div class="out" id="wr-cr-out"><span class="muted">上报真实持久化到本服务数据根 capability_map，可在运维面板"能力映射"复核。</span></div>
+    <div class="form-row">
+      <label class="f">素材 id（素材库面板可得）<input id="wr-al-id" type="text"></label>
+      <label class="f">license_status<select id="wr-al-status"><option>unknown</option><option>free</option><option>commercial</option><option>restricted</option><option>proprietary</option></select></label>
+      <label class="f">license_type<input id="wr-al-type" type="text" placeholder="commercial / editorial …"></label>
+      <button class="act" id="wr-al-btn">写素材授权状态（POST /assets/{id}/license）</button>
+    </div>
+    <div class="out" id="wr-al-out"><span class="muted">幽灵素材 id 诚实 404；真实 id 写后返回合并视图。</span></div>
+    <h3>AI 生成 · 真实 Provider 调用（Phase 48 接线）</h3>
+        <details class="info-box info-fold"><summary>四条生成端点真实调用 · 未配置 Provider 诚实返回 502，界面绝不绘制假图或假计划</summary><div>以下四条为生成类端点的真实调用，点击才发请求。<b>未配置可用 Provider 时它们诚实返回 502</b>：<code>/generate</code> 的 detail 是字符串（含 Ollama/API Key 指引），<code>/plan</code>、<code>/provider/chat</code>、<code>/provider/images</code> 的 detail 是对象 <code>{status:"no_provider_configured", fabricated:false, …}</code>——两种形态均原样呈现。失败的生成调用经探针实证不写任何数据根文件；成功的图像生成会真实落盘到本服务数据根内 <code>providers/generated/</code>，但因服务未开放该目录的静态文件路由，界面只报真实路径与字节数、<b>不绘制图像</b>。</div></details>
+    <div class="form-row">
+      <label class="f grow">prompt（生成管线，必填）<textarea id="wr-gen-prompt" rows="2">一只戴围巾的柴犬，扁平插画风</textarea></label>
+    </div>
+    <div class="form-row">
+      <label class="f">model（留空=按路由自动选；填未注册名诚实 400）<input id="wr-gen-model" type="text" placeholder="可选"></label>
+      <label class="f">resolution<input id="wr-gen-res" type="text" value="1024x1024"></label>
+      <label class="f">steps<input id="wr-gen-steps" type="number" value="30" min="1" max="100"></label>
+      <label class="f">guidance<input id="wr-gen-guidance" type="number" value="7.5" step="0.1"></label>
+      <label class="f">seed（留空=不传）<input id="wr-gen-seed" type="number" placeholder="可选"></label>
+      <label class="f">priority<select id="wr-gen-priority"><option value="cost">cost</option><option value="latency">latency</option><option value="privacy">privacy</option></select></label>
+      <button class="act" id="wr-gen-btn">生成（POST /generate）</button>
+    </div>
+    <div class="out" id="wr-gen-out"><span class="muted">经 ModelRouter 真实选路并计入熔断/预算；未配置后端时 502 原文呈现。</span></div>
+    <div class="form-row">
+      <label class="f">provider_id（四路共用，留空=默认已配置项）<input id="wr-plan-pid" type="text" placeholder="可选"></label>
+      <label class="f">timeout 秒（留空=服务端默认）<input id="wr-ai-timeout" type="number" placeholder="可选"></label>
+    </div>
+    <div class="form-row">
+      <label class="f grow">goal（Planner 目标，必填）<textarea id="wr-plan-goal" rows="2">为环保茶品牌设计一套包装并输出可执行步骤</textarea></label>
+      <label class="f grow">context（可空）<input id="wr-plan-ctx" type="text"></label>
+      <button class="act" id="wr-plan-btn">产出任务计划（POST /plan）</button>
+    </div>
+    <div class="out" id="wr-plan-out"><span class="muted">计划为真实 LLM 输出；输出非 JSON 时 status 如实为 unparseable 并保留 raw，绝不硬编造 schema。</span></div>
+    <div class="form-row">
+      <label class="f grow">prompt（文本对话，必填方可发有效请求）<textarea id="wr-chat-prompt" rows="2">用三句话说明刀版文件的作用</textarea></label>
+    </div>
+    <div class="form-row">
+      <label class="f">provider_id<input id="wr-chat-pid" type="text" placeholder="可选"></label>
+      <label class="f">model<input id="wr-chat-model" type="text" placeholder="可选"></label>
+      <label class="f">temperature<input id="wr-chat-temp" type="number" step="0.1" placeholder="可选"></label>
+      <label class="f">stream<select id="wr-chat-stream"><option value="false">false</option><option value="true">true</option></select></label>
+      <button class="act" id="wr-chat-btn">对话（POST /provider/chat）</button>
+    </div>
+    <div class="out" id="wr-chat-out"><span class="muted">真实解析 choices+usage；鉴权失败/不可达分别诚实报 auth_failed/unreachable。</span></div>
+    <div class="form-row">
+      <label class="f grow">prompt（图像生成，必填）<textarea id="wr-img-prompt" rows="2">极简线条logo，一只鹤</textarea></label>
+    </div>
+    <div class="form-row">
+      <label class="f">provider_id<input id="wr-img-pid" type="text" placeholder="可选"></label>
+      <label class="f">model（图像模型，留空=配置项或 gpt-image-1）<input id="wr-img-model" type="text"></label>
+      <label class="f">n<input id="wr-img-n" type="number" value="1" min="1" max="4"></label>
+      <label class="f">size<input id="wr-img-size" type="text" value="1024x1024"></label>
+      <button class="act" id="wr-img-btn">生成图像（POST /provider/images）</button>
+    </div>
+    <div class="out" id="wr-img-out"><span class="muted">images_generated 绝不虚报：等于真实解码落盘的 PNG 张数。</span></div>
+  </section>
+
+</main>
+<script src="/ui/app.js"></script>
+<script>
+/* 主题色板与玻璃强度：显式点击切换 + localStorage 持久化；不调用任何 API。
+   视觉状态（.on）与无障碍状态（aria-pressed）必须同源；系统「减弱透明度 / 增强对比度」
+   开启时，全玻璃与柔和两档如实显示为不可用，当前生效档显示为「关」。 */
+(function(){
+  var root=document.documentElement;
+  var mqT=window.matchMedia?window.matchMedia("(prefers-reduced-transparency: reduce)"):null;
+  var mqC=window.matchMedia?window.matchMedia("(prefers-contrast: more)"):null;
+  var titles={};
+  document.querySelectorAll("[data-glass-btn]").forEach(function(b){
+    titles[b.getAttribute("data-glass-btn")]=b.title;
+  });
+  function osSolid(){ return !!((mqT&&mqT.matches)||(mqC&&mqC.matches)); }
+  function mark(){
+    var c=root.getAttribute("data-theme")||"night";
+    document.querySelectorAll("[data-theme-btn]").forEach(function(b){
+      var on=b.getAttribute("data-theme-btn")===c;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on?"true":"false");
+    });
+    var solid=osSolid();
+    var eff=solid?"off":(root.getAttribute("data-glass")||"full");
+    document.querySelectorAll("[data-glass-btn]").forEach(function(b){
+      var v=b.getAttribute("data-glass-btn");
+      var lock=solid&&v!=="off";
+      b.classList.toggle("on", v===eff);
+      b.setAttribute("aria-pressed", v===eff?"true":"false");
+      b.disabled=lock;
+      b.title=lock?"系统已开启「减弱透明度」或「增强对比度」，此档在系统设置关闭后恢复":(titles[v]||"");
+    });
+  }
+  document.querySelectorAll("[data-theme-btn]").forEach(function(b){
+    b.addEventListener("click", function(){
+      root.setAttribute("data-theme", b.getAttribute("data-theme-btn"));
+      try{localStorage.setItem("zj-theme", b.getAttribute("data-theme-btn"));}catch(e){}
+      mark();
+    });
+  });
+  document.querySelectorAll("[data-glass-btn]").forEach(function(b){
+    b.addEventListener("click", function(){
+      root.setAttribute("data-glass", b.getAttribute("data-glass-btn"));
+      try{localStorage.setItem("zj-glass", b.getAttribute("data-glass-btn"));}catch(e){}
+      mark();
+    });
+  });
+  [mqT,mqC].forEach(function(m){
+    if(!m){return;}
+    if(m.addEventListener){ m.addEventListener("change", mark); }
+    else if(m.addListener){ m.addListener(mark); }
+  });
+  mark();
+})();
+</script>
+</body>
+</html>

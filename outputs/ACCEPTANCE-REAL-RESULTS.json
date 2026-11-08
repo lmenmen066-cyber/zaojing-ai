@@ -1,0 +1,411 @@
+{
+  "summary": {
+    "suite": "acceptance-real",
+    "note": "真实驱动服务；GATE=按 §2 红线诚实降级(需 Adobe 宿主/Provider/渲染器)，非伪造成功",
+    "golden_total": 28,
+    "super_total": 6,
+    "runtime_total": 7,
+    "installer_total": 9,
+    "real_pass": 49,
+    "honest_gates": 6,
+    "failures": 0,
+    "performance_ms": {
+      "health_ms": 6.93,
+      "color_palette_ms": 11.49,
+      "asset_vector_search_ms": 8.07,
+      "asset_search_hits": 5,
+      "knowledge_retrieve_ms": 5.75,
+      "layout_analyze_ms": 17.91,
+      "barcode_render_ms": 7.04,
+      "preflight_ms": 10.28,
+      "batch_12_preflight_ms": 31.8
+    }
+  },
+  "results": [
+    {
+      "kind": "[PASS]",
+      "section": "BOOT",
+      "id": "-",
+      "desc": "Agent Service 真实启动并返回 /health",
+      "detail": "engines=30"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T001",
+      "desc": "获取当前文档（服务端文档库真实可读）",
+      "detail": "mode=RGB layers=1"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T002",
+      "desc": "获取图层（返回列表结构真实）",
+      "detail": "count=1"
+    },
+    {
+      "kind": "[GATE]",
+      "section": "GOLDEN",
+      "id": "T003",
+      "desc": "选择对象需宿主 UXP（无宿主时不得伪造可执行） [诚实降级]",
+      "detail": "ps.open_document.runnable_now(before host)=False"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T004",
+      "desc": "创建图层后列表真实持久化",
+      "detail": "id=4fc77a92 total=2"
+    },
+    {
+      "kind": "[GATE]",
+      "section": "GOLDEN",
+      "id": "T005",
+      "desc": "自动命名对 Adobe 文档生效需宿主 [诚实降级]",
+      "detail": "无宿主上报前，改名类宿主工具一律 runnable_now=False"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T006",
+      "desc": "插入素材：真实入库并生成缩略图 + 向量索引",
+      "detail": "asset_id=7b582577-51d0-4e88-be36-67579bbcfa2a embed_dims=512 thumb=True"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T007",
+      "desc": "素材再入库真实（新记录可检索；活文档内替换归宿主）",
+      "detail": "reimported=5b3dbdd4-cc8f-411e-94f2-9a6bce3963fa"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T008",
+      "desc": "去背景：真实泛洪输出 alpha 透明 PNG",
+      "detail": "cleared=0.75 out=logo_no_bg.png"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T009",
+      "desc": "AI 生成未伪造成功（无 Provider 时如实降级，且绝无凭空 images_generated）",
+      "detail": "http=502 images_generated=None detail=None"
+    },
+    {
+      "kind": "[GATE]",
+      "section": "GOLDEN",
+      "id": "T009b",
+      "desc": "AI 生成需真实模型 Provider [诚实降级]",
+      "detail": "http=502"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T010",
+      "desc": "自动排版：真实左对齐（全部 x→0）且综合体检可复算",
+      "detail": "aligned=3 analyze_score=80"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T011",
+      "desc": "配色：真实图像量化调色板的 Top 色命中源像素色(近 (30,140,60))，非任意十六进制",
+      "detail": "colors=1 top=#1F8C3D rgb=[31, 140, 61] pct=100.0"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T012",
+      "desc": "客户改稿：真实解析为 proposed 并真实施加到对象副本（logo 尺寸变大）",
+      "detail": "proposed=1 logo_w_after=240.0"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T013",
+      "desc": "批量处理：真实逐文件成功/失败计数（缺失文件诚实 fail）",
+      "detail": "ok=3 fail=1 avg=0.0027s"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T014",
+      "desc": "印前检查：真实解析并给出 print_ready 判定",
+      "detail": "print_ready=False"
+    },
+    {
+      "kind": "[GATE]",
+      "section": "GOLDEN",
+      "id": "T015",
+      "desc": "生成样机需 3D 渲染/宿主——本服务未伪造样机为 supported [诚实降级]",
+      "detail": "真值表未把样机标 supported（诚实）"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T016",
+      "desc": "回滚：快照 SHA256 + 还原真实回退原始字节",
+      "detail": "recoverable=True restored=True bytes_match=True"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T017",
+      "desc": "中途取消：可恢复任务诚实记 interrupted、步序持久；不可恢复记 failed",
+      "detail": "cancel=interrupted@step2 hard=failed"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T018",
+      "desc": "中途接管：仅人工勾选项被真实应用，未批准项字节级保持原样",
+      "detail": "approved=['chg_01'] applied=1 title_color=#111111 title_fs=36"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T019",
+      "desc": "断网恢复：本地素材/配色/布局/印前基础能力真实继续可用",
+      "detail": "无外网 Provider 时核心本地引擎仍 200"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T020",
+      "desc": "崩溃恢复：悬空任务扫描真实 + 任务报告含可恢复快照信息",
+      "detail": "orphaned=0 report_keys=['available_snapshots', 'checkpoint_snapshot', 'current_step', 'error_message', 'last_heartbeat']"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T021",
+      "desc": "NAS：映射盘/共享经 OS 原生真实连接+枚举，路径穿越诚实拒绝",
+      "detail": "connect=connected size=14 traversal=forbidden"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T022",
+      "desc": "NAS：跨进程真实文件锁检测 locked=True + 未配置目标诚实 not_configured",
+      "detail": "lock=True ghost=not_configured"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T023",
+      "desc": "§46 矢量面板拓扑纯几何真算(9面板/8折/连通/裁切线870) + Phase 47 栅法刀版识别真实反演 6 面板(3x2 虚线网格：每块 2535px/7 条邻边全为 fold/度序列 [3,3,2,2,2,2]/连通 1 组/Otsu 阈值 0 与 墨 813-线 807-块状 6 逐数可复算/裁切轮廓 1248=2*(234+390))，非位图输入诚实 400 不臆造",
+      "detail": "topo=9p/8f cut=870.0 recog=recognized/6p txt400=400"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T024",
+      "desc": "AI Provider 真实往返(chat+usage/§17plan/图像落盘/密钥脱敏) + 未配置诚实502不伪造",
+      "detail": "pre502=502 chat=40 plan_steps=4 imgs=1"
+    },
+    {
+      "kind": "[GATE]",
+      "section": "GOLDEN",
+      "id": "T025a",
+      "desc": "无 Adobe 宿主连接时下发诚实 502 no_host_connected（绝不伪造文档变更） [诚实降级]",
+      "detail": "HTTP 502 err=no_host_connected"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T025b",
+      "desc": "Adobe UXP 桥接真实往返(握手+Token认证+能力协商+poll+宿主执行+回传对账 source=host / 受保护对象如实拒绝 / 未协商能力诚实降级 / 错Token auth_failed)",
+      "detail": "roundtrip=True exec=True prot=True gate=True auth=True"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "GOLDEN",
+      "id": "T025c",
+      "desc": "能力真值表红线分裂：adobe_uxp_bridge=supported 而 ps/ai_document_write 仍 needs_adobe_host",
+      "detail": "bridge=supported ps=needs_adobe_host ai=needs_adobe_host"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "SUPER",
+      "id": "§87.1",
+      "desc": "锁定品牌规范：真实入库 + 作用域内检索命中",
+      "detail": "chunks=1 hits=1"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "SUPER",
+      "id": "§87.2",
+      "desc": "生成环节真实可用：素材入库 + 三角和谐 3 色 + 多角色评审真实报出对比度/重叠问题",
+      "detail": "harmony=3 review_issues=4 score=68"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "SUPER",
+      "id": "§87.3",
+      "desc": "一键交付：真实归档存在文件并生成合法 ZIP",
+      "detail": "included=2 size=1578"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "SUPER",
+      "id": "§88.1",
+      "desc": "批量：12 个真实文件全部导入成功",
+      "detail": "ok=12"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "SUPER",
+      "id": "§88.2",
+      "desc": "保护机制：仅 Logo 对象可改（proposed 只命中 logo），受保护对象绝不产生可执行改动",
+      "detail": "proposed_targets={'logo'} conflicts=0"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "SUPER",
+      "id": "§88.3",
+      "desc": "执行范围收敛：应用后仅 logo 变化，其余对象字节级保持原值",
+      "detail": "logo_w=120.0 others_intact=True"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "RUNTIME",
+      "id": "R01",
+      "desc": "运行时诊断逐项由真实检查现场派生（checks_performed=实数、checks_failed=非 pass 计数、status 由 failed 派生、method=derived_from_real_checks、fabricated=false，且三类检查逐项在场）",
+      "detail": "{\"checks\": [\"data_root_writable\", \"disk_free\", \"python_version\"], \"performed\": 3, \"failed\": 0, \"status\": \"healthy\"}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "RUNTIME",
+      "id": "R02",
+      "desc": "诊断量到的就是本轮这台被验证实例：data_root=验收台亲自交的沙箱根、pid=验收台亲自起的子进程、写入探针真落在该根内并逐字节读回（不是自报布尔，是 detail 里的实测串）",
+      "detail": "{\"data_root\": \"C:\\\\Users\\\\ADMINI~1\\\\AppData\\\\Local\\\\Temp\\\\zjaccept_9gxf9vdw\\\\data\", \"pid_is_ours\": true, \"probe_detail\": \"C:\\\\Users\\\\ADMINI~1\\\\AppData\\\\Local\\\\Temp\\\\zjaccept_9gxf9vdw\\\\data\\\\.runtime-guard bytes_verified=True \", \"free_bytes\": 25693057024}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "RUNTIME",
+      "id": "R03",
+      "desc": "已监听端口被如实判为不可用：把本实例自己正在监听的端口交给诊断 ⇒ 第四项 port_available=fail、port.available=false、method=real_tcp_bind_probe，status 随之降为 degraded（绝不因'那是我自己的端口'而谎报可用）",
+      "detail": "{\"port\": 8799, \"available\": false, \"detail\": \"OSError: [WinError 10048] 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。\", \"status\": \"degraded\"}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "RUNTIME",
+      "id": "R04",
+      "desc": "port-check 与 diagnostic 对同一端口给出同一结论（独立两次真 bind，不互相抄），且 fabricated=false",
+      "detail": "{\"schema\": \"zaojing-runtime-guard/v1\", \"host\": \"127.0.0.1\", \"port\": 8799, \"available\": false, \"detail\": \"OSError: [WinError 10048] 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。\", \"method\": \"real_tcp_bind_probe\", \"fabricated\": false}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "RUNTIME",
+      "id": "R05",
+      "desc": "入参非法一律诚实 400（类型错与越界各归各的错，绝不静默降级成 available=true 放行）",
+      "detail": "{\"str\": 400, \"oob\": 400, \"msgs\": [\"port 需为数值，收到 str\", \"port 需为 1~65535 的整数\"]}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "RUNTIME",
+      "id": "R06",
+      "desc": "单实例互斥真驱动内核对象：首次 acquire=已持有、同名二次 acquire 如实 already_running（后端 kernel32-named-mutex、pid=被测进程）、release 真释放，非法 action 诚实 400",
+      "detail": "{\"first\": {\"schema\": \"zaojing-runtime-guard/v1\", \"name\": \"zjaccept-2440\", \"acquired\": true, \"already_running\": false, \"backend\": \"kernel32-named-mutex\", \"pid\": 2440, \"fabricated\": false}, \"again\": {\"acquired\": false, \"already_running\": true}, \"released\": true, \"bad_action\": 400}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "RUNTIME",
+      "id": "R07",
+      "desc": "安装执行域的契约面由引擎现场派生：capability=installer_execution、status=executable_via_cli_only、门禁清单非空且含 confirmation_required、显式同意令牌逐字在场、判据口径 derived_from_disk_and_registry、退役边界保留 Phase 26 原句 needs_installer_environment（退役≠改写）",
+      "detail": "{\"gates\": 10, \"actions\": [\"silent_install\", \"registry_entries\", \"shortcuts\", \"uninstaller\"], \"token\": \"ZAOJING-CONFIRM-EXECUTE-INSTALLER\", \"retired\": \"needs_installer_environment\"}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "INSTALLER",
+      "id": "I01",
+      "desc": "静态校验真读盘真解析：脚本字节数与 sha256 与验收台独立实算逐字相等，findings 计数与分类自洽，且本引擎如实声明零执行（execution.performed=false / not_executed_by_this_engine）",
+      "detail": "{\"verdict\": \"manifest_ok\", \"script_bytes\": 5668, \"sha_eq_disk\": true, \"counts\": {\"errors\": 0, \"warnings\": 0, \"infos\": 0, \"total\": 0}}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "INSTALLER",
+      "id": "I02",
+      "desc": "安装态只由注册表卸载项真实命中派生（installed == 四视图探针的 any(present)，绝不凭目录/标记存在就说已安装），AppId 来源如实标注 setup_iss，卸载键与静态校验同一条派生链",
+      "detail": "{\"installed\": false, \"reg_views\": 4, \"subkey_counts\": [42, 42, 200, 134], \"uninstall_key\": \"{D4C8A1F2-7B3E-4E5A-9C6D-2F1B8A47E3D5}_is1\"}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "INSTALLER",
+      "id": "I03",
+      "desc": "编译证据 vs 磁盘实况逐字段重算对账：verdict 与其自身信号按同一规则派生，脚本/产物的 expected 来自证据文件而 observed 由验收台独立实算三方相等，自报布尔不参与判定（ignored=true），产物在盘绝不等于已安装（installed_claimed 恒 false）",
+      "detail": "{\"verdict\": \"artifact_verified\", \"derived_expect\": \"artifact_verified\", \"artifact_bytes\": 52484613, \"sha_triple_ok\": true, \"compile_line_text\": \"Successful compile (8.844 sec). Resulting Setup program filename is:\"}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "INSTALLER",
+      "id": "I04",
+      "desc": "预检 verdict 由其自身 blocking/unknowns 按规则派生；写探针未获准时如实进 unknowns 且 result=null（'没探测'绝不写成'不可写'，也绝不写成'可写'），七面检查齐全",
+      "detail": "{\"verdict\": \"preflight_unknown\", \"derived_expect\": \"preflight_unknown\", \"unknowns\": [\"write_probe_unprobed\"], \"writability\": null}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "INSTALLER",
+      "id": "I05",
+      "desc": "预检的磁盘需求是实测和而非外推系数（required_bytes == artifact_bytes + payload_bytes，且 result 与 free>=required 同向）；产物面复用编译面结论、载荷逐项在盘",
+      "detail": "{\"required\": 104063596, \"sum_ok\": true, \"free\": 25693057024, \"measured_on\": \"C:\\\\Program Files\\\\造境科技\", \"payload_present\": 3}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "INSTALLER",
+      "id": "I06",
+      "desc": "预检的两条形制负控如实拒绝：probe 参数非布尔词 → 400 并回显全部被接受写法；target_override 指向真实安装根 → 403 且回显允许根与理由（真实安装根在 HTTP 面上结构性不可达，写探针到不了 Program Files）",
+      "detail": "{\"bad_probe\": 400, \"accepted\": [\"true\", \"1\", \"yes\", \"on\", \"false\", \"0\", \"no\", \"off\"], \"outside_root\": 403, \"reason\": \"preflight_override_outside_allowed_roots\", \"roots\": [\"C:\\\\Users\\\\Administrator\\\\.qoderworkcn\\\\workspace\\\\mu8l7lfenzrqswc8\\\\outputs\"]}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "INSTALLER",
+      "id": "I07",
+      "desc": "越界路径一律诚实 403 而非'读不到就当没有'：把证据指到系统目录被安全策略挡回，路径原样回显（只核验本产品的构建物是可断言的事实）",
+      "detail": "{\"status\": 403, \"detail\": \"路径被安全策略阻止: C:\\\\WINDOWS\\\\zj-accept-evidence.json\"}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "INSTALLER",
+      "id": "I08",
+      "desc": "执行台账对账在沙箱数据根内如实 ledger_absent：台账路径钉在本服务自己的 DATA_ROOT 下（可被指到别处就不叫对账而叫投毒）、mismatches 空、自报字段清单逐枚在场而判定基础恒为现场磁盘+注册表",
+      "detail": "{\"status\": \"ledger_absent\", \"ledger_path\": \"C:\\\\Users\\\\ADMINI~1\\\\AppData\\\\Local\\\\Temp\\\\zjaccept_9gxf9vdw\\\\data\\\\installer\\\\execution-evidence.json\", \"ignored\": [\"install.installed\", \"install.status\", \"install.log.seen_finished_line\", \"uninstall.performed\", \"uninstall.status\", \"build_ledger.compiled\", \"build_ledger.fabricated\"], \"reason\": \"本机从未按这条链跑过真实安装/卸载——没有台账就如实说没有，绝不伪造回执\"}"
+    },
+    {
+      "kind": "[GATE]",
+      "section": "INSTALLER",
+      "id": "I09",
+      "desc": "安装执行域在 HTTP 面上结构性不可达：/openapi.json 现场派生 ⇒ 安装域每条路由只有 GET、且安装域无一条未被本段驱动（枚举器数得出又不漏），第 6 条安装契约面 install-actions 同为 GET（集合大小由派生恒等式给出，不抄裸计数）；本服务按红线如实拒绝从 HTTP 触发安装，绝不代执行器声称装了什么 [诚实降级]",
+      "detail": "{\"installer_methods\": {\"/api/v1/installer/manifest/verify\": [\"GET\"], \"/api/v1/installer/state\": [\"GET\"], \"/api/v1/installer/artifact\": [\"GET\"], \"/api/v1/installer/preflight\": [\"GET\"], \"/api/v1/installer/execution\": [\"GET\"]}, \"install_surface\": [\"/api/v1/installer/artifact\", \"/api/v1/installer/execution\", \"/api/v1/installer/manifest/verify\", \"/api/v1/installer/preflight\", \"/api/v1/installer/state\", \"/api/v1/runtime/install-actions\"], \"undriven\": [], \"ghost\": [], \"legs\": {\"openapi枚举可用(正控:安装域非空且本段真驱动的路由全在其中)\": true, \"安装域每条路由只有GET\": true, \"安装域无一条未被真实台驱动\": true, \"install-actions也是GET(安装契约面全GET)\": true, \"安装面六条=前缀5条+install-actions1条(派生恒等式)\": true, \"契约自陈HTTP走不到执行器\": true, \"现场未安装\": true, \"台账如实缺席\": true, \"编译面不声称已安装\": true}}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "PERF",
+      "id": "metrics",
+      "desc": "真实性能指标已测（毫秒为墙钟，非伪造）",
+      "detail": "{\"health_ms\": 6.93, \"color_palette_ms\": 11.49, \"asset_vector_search_ms\": 8.07, \"asset_search_hits\": 5, \"knowledge_retrieve_ms\": 5.75, \"layout_analyze_ms\": 17.91, \"barcode_render_ms\": 7.04, \"preflight_ms\": 10.28, \"batch_12_preflight_ms\": 31.8}"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "PERF",
+      "id": "health_ms",
+      "desc": "health_ms 为真实正耗时且 <2000ms",
+      "detail": "6.93ms"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "PERF",
+      "id": "color_palette_ms",
+      "desc": "color_palette_ms 为真实正耗时且 <2000ms",
+      "detail": "11.49ms"
+    },
+    {
+      "kind": "[PASS]",
+      "section": "PERF",
+      "id": "asset_vector_search_ms",
+      "desc": "asset_vector_search_ms 为真实正耗时且 <2000ms",
+      "detail": "8.07ms"
+    }
+  ]
+}

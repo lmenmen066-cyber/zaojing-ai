@@ -1,0 +1,115 @@
+[tool.poetry]
+name = "zaojing-agent-service"
+version = "1.0.0"
+description = "造境 AI 设计智能体 - Agent Service"
+authors = ["ZaoJing Team <team@zaojing.com>"]
+license = "Proprietary"
+
+# P0-2 修复：锁定 Python 版本为稳定版
+# 原因：Python 3.14 太新，大量依赖库尚未完全适配
+# 目标：使用经过广泛测试的 3.11/3.12
+python = ">=3.11,<3.13"
+
+[tool.poetry.dependencies]
+# Python 版本要求（Poetry 会自动验证）
+python = ">=3.11,<3.13"
+
+# 核心 Web 框架
+fastapi = "^0.104.0"
+uvicorn[standard] = "^0.24.0"
+pydantic = "^2.5.0"
+python-multipart = "^0.0.6"
+
+# HTTP 客户端
+httpx = "^0.25.0"
+aiohttp = "^3.9.0"
+
+# 数据库
+sqlalchemy = "^2.0.23"
+aiosqlite = "^0.19.0"
+qdrant-client = "^1.7.0"
+
+# AI/ML
+numpy = "^1.24.0"
+pillow = "^10.1.0"
+opencv-python = { version = "^4.8.0", optional = true }
+
+# 工具库
+pyyaml = "^6.0.1"
+click = "^8.1.7"
+rich = "^13.7.0"
+loguru = "^0.7.2"
+
+# 安全
+cryptography = "^41.0.7"
+python-jose = { extras = ["cryptography"], version = "^3.3.0" }
+
+# Adobe UXP (本地开发时使用)
+# @adobe/uxp-plugin-toolkit = "^2.2.0"
+
+# 异步支持
+anyio = "^4.3.0"
+trio = "^0.24.0"
+
+# 监控与日志
+sentry-sdk = "^1.39.0"
+
+# 可选依赖
+# opencv-python = { version = "^4.8.0", optional = true }  # 图像处理
+
+[tool.poetry.extras]
+opencv = ["opencv-python"]
+
+[tool.poetry.group.dev.dependencies]
+# 测试
+pytest = "^7.4.3"
+pytest-cov = "^4.1.0"
+pytest-asyncio = "^0.21.0"
+pytest-mock = "^3.12.0"
+
+# 代码质量
+ruff = "^0.1.9"
+black = "^23.12.0"
+mypy = "^1.8.0"
+
+# 文档
+mkdocs = "^1.5.3"
+mkdocs-material = "^9.5.12"
+
+# 打包
+pyinstaller = "^6.3.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# P0-2 修复说明:
+# ====================
+# 
+# 旧配置问题:
+#   python = ">=3.14.0"  # ❌ Python 3.14 太新，依赖不兼容
+# 
+# 修复方案:
+#   python = ">=3.11,<3.13"  # ✅ 锁定在稳定版本区间
+# 
+# 选择理由:
+#   1. Python 3.11 (2022-10 发布) - 性能提升显著，生态成熟
+#   2. Python 3.12 (2023-10 发布) - 最新稳定版，逐步普及
+#   3. Python 3.13+ - 仍在早期阶段，部分依赖库未适配
+# 
+# 影响范围:
+#   - CI/CD 流水线必须使用 3.11 或 3.12
+#   - PyInstaller 打包必须使用 3.11
+#   - 生产环境部署锁定 3.11/3.12
+# 
+# 验证命令:
+#   poetry check          # 验证配置
+#   poetry env info       # 查看当前环境
+#   python --version      # 确认版本
+# 
+# 切换 Python 版本:
+#   pyenv install 3.11.9
+#   pyenv local 3.11.9
+#   poetry env use 3.11.9
+# 
+# ====================

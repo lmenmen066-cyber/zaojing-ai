@@ -1,0 +1,25 @@
+{
+  "id": "com.zaojing.ai.bridge.ai",
+  "name": { "value": "造境 AI 设计智能体 (Illustrator Bridge)" },
+  "version": "1.0.0",
+  "manifestVersion": 5,
+  "main": "index.html",
+  "host": [
+    { "app": "Ai", "minVersion": "25.0.0" }
+  ],
+  "requiredPermissions": {
+    "localFileSystem": "full",
+    "network": { "domains": ["host:localhost", "allow-list:*.zaojing.local"] }
+  },
+  "executionmode": { "type": "command", "script": "main.js" },
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "zaojingBridgePanel",
+      "label": { "value": "造境桥接" },
+      "minimumSize": { "width": 260, "height": 300 },
+      "maximumSize": { "width": 2000, "height": 2000 },
+      "preferredDockedSize": { "width": 300, "height": 420 }
+    }
+  ]
+}

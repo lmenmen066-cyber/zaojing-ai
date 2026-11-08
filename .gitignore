@@ -1,0 +1,50 @@
+# Build artifacts
+__pycache__/
+dist/
+portable/
+installer/
+build/
+*.zip
+*.spec.local
+*.toc
+
+# Logs
+*.log
+build*.log
+
+# Probe / scratch scripts (pXX_* pattern = hundreds of one-off diagnostic files)
+p[0-9]*_*.py
+p[0-9]*_*.txt
+p[0-9]*_*.json
+p[0-9]*_*.out
+_p[0-9]*
+zj_l1_selftest_err.txt
+zj_mut_err.txt
+zj_registry_probe_err.txt
+
+# Quarantine / scratch
+_fabricated-quarantine/
+_l1_scratch_eval/
+_p53rp/
+_p53rp2/
+
+# Stale result files
+*_result.txt
+*_console.txt
+*_payload_view.txt
+*_doc_view.txt
+*_helpers2.txt
+
+# Data / binary
+Data/
+Logs/
+*.psd
+*.exe
+*.lnk
+*.zxp
+*.ccx
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini

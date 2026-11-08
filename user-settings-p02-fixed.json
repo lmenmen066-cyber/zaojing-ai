@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "assets": {
+    "local_root": "C:\\Users\\Administrator\\AppData\\Local\\Zaojing\\Assets",
+    "nas_enabled": false,
+    "nas_paths": [],
+    "auto_tag_enabled": true,
+    "embedding_model": "clip-ViT-B-32",
+    "max_index_assets": 100000,
+    "engine_url": "http://127.0.0.1:8082"
+  },
+  "blocked_paths": [
+    "C:\\Windows",
+    "C:\\Program Files",
+    "C:\\Program Files (x86)",
+    "/usr",
+    "/etc",
+    "/bin",
+    "/sbin"
+  ],
+  "allowed_extensions": [
+    ".psd",
+    ".ai",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".tiff",
+    ".webp",
+    ".svg",
+    ".pdf",
+    ".eps",
+    ".zip"
+  ],
+  "python_version": {
+    "min": "3.11",
+    "max": "3.12",
+    "recommended": "3.11"
+  },
+  "paths": {
+    "data_root": "C:\\Users\\Administrator\\AppData\\Local\\Zaojing",
+    "logs": "C:\\Users\\Administrator\\AppData\\Local\\Zaojing\\logs",
+    "cache": "C:\\Users\\Administrator\\AppData\\Local\\Zaojing\\cache",
+    "models": "C:\\Users\\Administrator\\AppData\\Local\\Zaojing\\models",
+    "projects": "C:\\Users\\Administrator\\AppData\\Local\\Zaojing\\projects",
+    "snapshots": "C:\\Users\\Administrator\\AppData\\Local\\Zaojing\\snapshots",
+    "backups": "C:\\Users\\Administrator\\AppData\\Local\\Zaojing\\backups"
+  },
+  "license": {
+    "machine_id_tracking": true,
+    "grace_period_days": 7,
+    "cloud_validation_enabled": false
+  },
+  "ui": {
+    "theme": "dark",
+    "language": "zh-CN",
+    "auto_update_enabled": true
+  },
+  "ai": {
+    "local_model_enabled": true,
+    "cloud_provider_priority": [
+      "doubao",
+      "tongyi",
+      "zhipu"
+    ],
+    "max_concurrent_generations": 2
+  }
+}

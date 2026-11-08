@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "C:\Users\Administrator\.qoderworkcn\workspace\mu8l7lfenzrqswc8\outputs\panel_recognition_engine.py", line 778, in <module>
+    raise SystemExit(_selftest())
+                     ~~~~~~~~~^^
+  File "C:\Users\Administrator\.qoderworkcn\workspace\mu8l7lfenzrqswc8\outputs\panel_recognition_engine.py", line 689, in _selftest
+    assert sorted(ok) == sorted(r) == sorted(cross), (
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'engine', 'method', 'params', 'background', 'binarize', 'implemented', 'image', 'outline', 'caveats', 'rejected', 'segments', 'topology', 'rejected_count', 'panel_count', 'fabricated', 'status', 'panels', 'lines'}
