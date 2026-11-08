@@ -65,7 +65,9 @@ PORT, _PORT_PROBES = _pick_port()
 BASE = "http://127.0.0.1:%d" % PORT
 print("[PORT] L2 acceptance port=%d (OS-assigned ephemeral; fixed-band probes=%s = 本轮不再"
       "与之争抢的外部/残留持有者留档)" % (PORT, json.dumps(_PORT_PROBES)))
-OUT = Path(r"C:\Users\Administrator\.qoderworkcn\workspace\mu8l7lfenzrqswc8\outputs")
+# 仓库根目录 = 本脚本所在目录（脚本位于 outputs 仓库根）。早先写死本机绝对路径会让
+# 任何其它检出（含 CI runner）找不到 agent_service.py 与 webui/*，此处改为相对脚本自身定位。
+OUT = Path(__file__).resolve().parent
 sys.path.insert(0, str(OUT))
 from license_service import issue_license_key  # 服务端默认 SECRET 一致（两者均未设 ZAOJING_LICENSE_SECRET）
 tmp = Path(tempfile.mkdtemp(prefix="zjtest_"))

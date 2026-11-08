@@ -5,7 +5,9 @@ from pathlib import Path
 import requests
 from PIL import Image
 
-OUT = Path(r"C:\Users\Administrator\.qoderworkcn\workspace\mu8l7lfenzrqswc8\outputs")
+# 仓库根目录 = 本脚本所在目录。早先写死本机绝对路径会让任何其它检出（含 CI runner）
+# 在 dist/、便携 ZIP、portable/ 上必然找不到文件，此处改为相对脚本自身定位。
+OUT = Path(__file__).resolve().parent
 EXE = OUT / "dist" / "ZaojingAI.exe"
 ZIP = OUT / "zaojing-ai-1.0.8-portable.zip"
 PORT_DIR = OUT / "portable"

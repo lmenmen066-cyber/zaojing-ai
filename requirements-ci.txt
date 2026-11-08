@@ -1,0 +1,26 @@
+# CI / 本地验收依赖（Python >=3.11,<3.13，建议 3.12）
+# 说明：这是运行 agent_service.py 服务与 L2/L4 验收脚本所需的第三方依赖集合。
+# 造境引擎与多数能力以纯标准库实现，本清单仅覆盖被 import 到的第三方库；
+# 缺少其中若干包会导致对应引擎在 agent_service 导入期降级（_IMPORT_ERRORS），
+# 从而无法命中验收脚本按真实态钉死的引擎计数，故 CI 须完整安装。
+
+# --- Web 服务运行时（agent_service.py）---
+fastapi>=0.110
+pydantic>=2.6
+uvicorn>=0.27
+
+# --- 引擎侧可选第三方依赖（缺失即降级，影响能力真值表计数）---
+pillow>=10.2          # 色彩/条码/品牌/面板识别等像素处理
+numpy>=1.26           # 图像处理与向量化
+pyyaml>=6.0           # 模型注册表 / 配置夹具（asset/model-router 引擎）
+aiohttp>=3.9          # 素材引擎异步 IO
+aiofiles>=23.2        # 素材引擎异步文件
+fonttools>=4.50       # 字体排版引擎（度量、cmap 覆盖）
+pypdf>=4.0            # 知识库 RAG PDF 文本抽取（旧名 PyPDF2 亦兼容）
+
+# --- L2/L4 验收脚本专用 ---
+requests>=2.31        # 两脚本通过真实 HTTP 驱动自起的服务/冻结 EXE
+opencv-python>=4.8    # 跨实现条码逐字读回（cv2.barcode），与产品端零依赖相隔离
+
+# --- L4 前置：冻结 EXE 构建（build-installer.py 调用）---
+pyinstaller>=6.5      # 产出 dist/ZaojingAI.exe 与便携 ZIP / portable 目录，供 L4 活体验收
