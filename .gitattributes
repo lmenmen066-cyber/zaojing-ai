@@ -1,0 +1,5 @@
+# 交付安装脚本 setup.iss 以 CRLF 落盘：Inno Setup 脚本惯例，且 L2 的 setup.iss 逐字节镜像
+# 判据（b"\r\n" in read_bytes()、raw-bytes sha256 != 文本归一后 sha256）依赖这份实况。
+# eol=crlf 让任意检出（含 CI runner，不受其 git core.autocrlf 默认值左右）都稳定拿到 CRLF，
+# 只固定检出的换行形制，不改变 blob 内容本身。
+*.iss text eol=crlf

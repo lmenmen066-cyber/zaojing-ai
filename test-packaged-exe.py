@@ -12,6 +12,46 @@ EXE = OUT / "dist" / "ZaojingAI.exe"
 ZIP = OUT / "zaojing-ai-1.0.8-portable.zip"
 PORT_DIR = OUT / "portable"
 
+
+def _zj_uninstall_count(root, view):
+    """测试侧独立复算某注册表视图下 Uninstall 的真实子键数，用于交叉核对服务端探针回报的
+    subkey_count（尺子修复：旧判据「四视图逐一 subkey_count>0」钉的是作者机观测——干净 Windows
+    runner 的 HKCU\\...\\Uninstall 合法为 0，作者机因装过第三方而 HKCU=37；换成机器无关且更强的
+    等式：服务端回报数==本函数现场枚举数，并另加四视图合计>0 的反桩地板）。与引擎
+    installer_manifest_engine._enum_uninstall_keys 同一开窗口径；非 Windows/键不可开 → 0，对齐
+    服务端 OSError→空列表→计数 0 的实况。"""
+    if not sys.platform.startswith("win"):
+        return 0
+    try:
+        import winreg
+    except Exception:
+        return 0
+    hive = winreg.HKEY_CURRENT_USER if root == "HKCU" else winreg.HKEY_LOCAL_MACHINE
+    flag = winreg.KEY_WOW64_32KEY if str(view) == "32" else winreg.KEY_WOW64_64KEY
+    try:
+        _h = winreg.OpenKey(hive, r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+                            0, winreg.KEY_READ | flag)
+        return int(winreg.QueryInfoKey(_h)[0])
+    except OSError:
+        return 0
+
+
+# 内容类型家族判定（尺子修复，非判据削弱）：StaticFiles 的 content-type 由 stdlib mimetypes 决定，
+# 而 mimetypes 在 Windows 上还会读 HKEY_CLASSES_ROOT 里各安装器登记的 .js Content Type；作者机与
+# CI runner 可分别给 text/javascript / application/javascript——二者都是合法 JS MIME 拼法、浏览器
+# 行为一致，属环境差异而非产品契约。家族成员之外（octet-stream/plain）照样判红，可证伪性保留。
+_ZJ_CT_FAMILY = {
+    "text/html": {"text/html"},
+    "text/css": {"text/css"},
+    "text/javascript": {"text/javascript", "application/javascript", "application/ecmascript",
+                        "text/ecmascript", "application/x-javascript", "module"},
+}
+
+
+def _zj_ct_ok(want, got):
+    base = (got or "").split(";", 1)[0].strip().lower()
+    return base in _ZJ_CT_FAMILY.get(want, {want.lower()})
+
 results = []
 def check(name, cond, detail=""):
     tag = "[PASS]" if cond else "[FAIL]"
@@ -2508,10 +2548,15 @@ try:
               ("HKCU", "64"), ("HKCU", "32"), ("HKLM", "64"), ("HKLM", "32")}
           and sorted({p.get("probe") for p in (_mxs49.get("probes") or [])}) == [
               "app_data_root", "portable_flag", "registry_uninstall", "start_menu_group"]
-          # 枚举必须真有数据：subkey_count>0 才说明"零命中"是真的零命中，
-          # 而不是接缝被桩成恒空列表（那种假绿与诚实未装长得一模一样）。
-          and all(isinstance(p.get("subkey_count"), int) and p["subkey_count"] > 0
+          # 枚举必须真有数据（尺子修复，非判据削弱）：旧此处的「四视图逐一 subkey_count>0」钉的
+          # 是作者机观测——干净 Windows runner 的 HKCU\...\Uninstall 合法为 0（作者机因装过第三方
+          # 而 HKCU=37）。换成机器无关且**更强**的等式：服务端回报的每视图子键数==测试侧独立 winreg
+          # 现场枚举数（_zj_uninstall_count，与引擎同开窗口径），另加一条四视图合计>0 的反桩地板——
+          # HKLM 在任何 Windows 上都非空，故"接缝被整体桩成恒空"必红，HKCU 诚实为 0 时 0==0 仍绿。
+          and all(isinstance(p.get("subkey_count"), int)
+                  and p["subkey_count"] == _zj_uninstall_count(p.get("root"), p.get("view"))
                   for p in _reg49x)
+          and sum(_zj_uninstall_count(p.get("root"), p.get("view")) for p in _reg49x) > 0
           and _mxs49.get("installed") is any(
               p.get("present") for p in _reg49x)
           # 本机真值：HKCU/HKLM 卸载子键零命中 ⇒ installed 必为 False（不变式之外再钉观测面，
@@ -3236,7 +3281,7 @@ try:
             "bogus_disk_eq": _p69ce_bogus.content == _p69ce_disk.read_bytes()})
     _p69ce_legs = {
         "population_3": len(_p69ce_rows) == 3,
-        "types_3": all(_r["want_ct"] in _r["ct"] for _r in _p69ce_rows),
+        "types_3": all(_zj_ct_ok(_r["want_ct"], _r["ct"]) for _r in _p69ce_rows),
         "explicit_cc_3": all(_r["cc"] is not None for _r in _p69ce_rows),
         "cc_no_cache_3": all("no-cache" in (_r["cc"] or "") for _r in _p69ce_rows),
         "validators_3": all(_r["etag"] and _r["lm"] for _r in _p69ce_rows),
@@ -3259,6 +3304,7 @@ try:
           "十一腿逐名求值，detail 自带 red=[失败腿名]；腿名与 L2 的 webui(P69c) 一一对得上",
           all(_p69ce_legs.values()) and len(_p69ce_legs) == 11,
           f"red={_p69ce_red} n={len(_p69ce_rows)} cc={[(_r['path'], _r['cc']) for _r in _p69ce_rows]} "
+          f"ct={[(_r['path'], _r['want_ct'], _r['ct']) for _r in _p69ce_rows]} "
           f"cond={[(_r['path'], _r['cond_status'], _r['cond_len']) for _r in _p69ce_rows]} "
           f"ims={[_r['ims_status'] for _r in _p69ce_rows]} "
           f"bogus={[(_r['path'], _r['bogus_status'], _r['bogus_disk_eq']) for _r in _p69ce_rows]} "

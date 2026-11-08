@@ -69,6 +69,56 @@ print("[PORT] L2 acceptance port=%d (OS-assigned ephemeral; fixed-band probes=%s
 # 任何其它检出（含 CI runner）找不到 agent_service.py 与 webui/*，此处改为相对脚本自身定位。
 OUT = Path(__file__).resolve().parent
 sys.path.insert(0, str(OUT))
+
+# ---- 布局基准 shim（尺子修复，非判据削弱）----
+# 本 harness 早期按「脚本父目录下再有一层 outputs/ 放源码与产物」的两级树撰写，全文以
+# `<脚本父目录> / "outputs" / X` 定位 setup.iss / installer/ / cdr_host.py / portable/ 等。
+# 本仓库把这些产物平铺在与本脚本同级处（= OUT 本身，与 L4 脚本零 "outputs" 引用可佐证），
+# 故凡旧式 `<base> / "outputs" / X` 在平铺检出里都应解析到 OUT。这里据 setup.iss 的真实落点
+# 自动选定基准：两级树里它在 OUT/outputs、平铺仓库里它就在 OUT——只搬文件定位，不动任何断言语义。
+_ZJ_OUTBASE = (OUT / "outputs") if (OUT / "outputs" / "setup.iss").is_file() else OUT
+
+
+def _zj_uninstall_count(root, view):
+    """测试侧**独立复算**某注册表视图下 Uninstall 的真实子键数，用来交叉核对服务端探针回报的
+    subkey_count（尺子修复：把旧判据「四视图逐一 subkey_count>0」这一作者机耦合——干净 Windows
+    runner 的 HKCU\\...\\Uninstall 合法为 0，作者机却因装过第三方应用而 HKCU=37——换成与机器无关
+    且**更强**的等式：服务端回报数==本函数现场枚举数，且四视图合计>0 以证枚举接缝非恒空桩。
+    与 installer_manifest_engine._enum_uninstall_keys 同一开窗口径；非 Windows/键不可开 → 0，
+    对齐服务端 OSError→空列表→计数 0 的实况。"""
+    if not sys.platform.startswith("win"):
+        return 0
+    try:
+        import winreg
+    except Exception:
+        return 0
+    hive = winreg.HKEY_CURRENT_USER if root == "HKCU" else winreg.HKEY_LOCAL_MACHINE
+    flag = winreg.KEY_WOW64_32KEY if str(view) == "32" else winreg.KEY_WOW64_64KEY
+    try:
+        _h = winreg.OpenKey(hive, r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+                            0, winreg.KEY_READ | flag)
+        return int(winreg.QueryInfoKey(_h)[0])
+    except OSError:
+        return 0
+
+
+# 内容类型家族判定（尺子修复，非判据削弱）：StaticFiles 的 content-type 来自 stdlib mimetypes，
+# 而 mimetypes 在 Windows 上还会读 HKEY_CLASSES_ROOT 里各安装器登记的 .js Content Type——作者机与
+# CI runner 的注册表可分别给 text/javascript / application/javascript。二者都是合法的 JS MIME 拼法、
+# 浏览器行为一致，属环境差异而非产品契约。故对 JS 资产钉「类型家族」而非某个 stdlib 拼写：家族成员
+# 之外的值（如 application/octet-stream、text/plain）照样判红——既去掉拼写耦合，又保留可证伪性。
+_ZJ_CT_FAMILY = {
+    "text/html": {"text/html"},
+    "text/css": {"text/css"},
+    "text/javascript": {"text/javascript", "application/javascript", "application/ecmascript",
+                        "text/ecmascript", "application/x-javascript", "module"},
+}
+
+
+def _zj_ct_ok(want, got):
+    base = (got or "").split(";", 1)[0].strip().lower()
+    return base in _ZJ_CT_FAMILY.get(want, {want.lower()})
+
 from license_service import issue_license_key  # 服务端默认 SECRET 一致（两者均未设 ZAOJING_LICENSE_SECRET）
 tmp = Path(tempfile.mkdtemp(prefix="zjtest_"))
 
@@ -586,7 +636,7 @@ try:
     import hashlib as _hl49
     import re as _re49
     _p49root = Path(__file__).resolve().parent   # 本文件在根，_root43 在下游才绑定，勿前向引用
-    _iss49 = _p49root / "outputs" / "setup.iss"
+    _iss49 = _ZJ_OUTBASE / "setup.iss"
     # 磁盘脚本里那行 AppId=（构建期由 build-installer.py 从 INSTALLER_APP_ID 生成）
     _appid49 = _re49.search(r"(?m)^AppId=(.+?)\s*$",
                             _iss49.read_text(encoding="utf-8")).group(1)
@@ -600,7 +650,7 @@ try:
                          params={"script_path": str(_iss49)}).json()
     _ms49 = requests.get(BASE + "/api/v1/installer/state", timeout=60)
     _msj49 = _ms49.json()
-    _txt49 = _p49root / "outputs" / "p49_wiring_probe.out"   # 允许根内、非 .iss 后缀 → 400 负控
+    _txt49 = _ZJ_OUTBASE / "p49_wiring_probe.out"   # 允许根内、非 .iss 后缀 → 400 负控
     # Phase 80 判卷侧涟漪：早期 cleanup 把这份探针遗留件移入回收站，validate_file_path
     # 的 exists() 早于 suffix 检查，非 .iss 负控会退化成一记 404。该文件仅承担"路径
     # 存在且落在允许根、后缀非 .iss"这一 fixture 角色，L2 自建以确保自足——
@@ -608,7 +658,7 @@ try:
     if not _txt49.exists():
         _txt49.write_text("p49_wiring_probe stdout fixture (path-only sentinel for suffix 400)\n",
                           encoding="utf-8")
-    _py49 = _p49root / "outputs" / "p49_wiring_probe.py"     # 源码后缀被共享路径策略先拦 → 403 负控
+    _py49 = _ZJ_OUTBASE / "p49_wiring_probe.py"     # 源码后缀被共享路径策略先拦 → 403 负控
     _out49 = Path(str(tmp)) / "p49_outside_allowed_root.iss"
     # Phase 80 判卷侧涟漪（仪器缺陷伪装成产品结论，尺子修复、非产品改动、非新增 check 位）：
     # 服务端 installer manifest-verify 的每一条错误分支（含 manifest_path_outside_allowed_roots）
@@ -626,7 +676,7 @@ try:
     _r403 = requests.get(BASE + "/api/v1/installer/manifest/verify", timeout=30,
                          params={"script_path": str(_out49)})
     _r404 = requests.get(BASE + "/api/v1/installer/manifest/verify", timeout=30,
-                         params={"script_path": str(_p49root / "outputs" / "p49_no_such_manifest.iss")})
+                         params={"script_path": str(_ZJ_OUTBASE / "p49_no_such_manifest.iss")})
     _rh49 = {k: v for k, v in (requests.get(BASE + "/api/v1/metrics", timeout=30).json()
                                .get("route_hits") or {}).items() if "installer" in k}
     _reg49 = [p for p in (_msj49.get("probes") or []) if p.get("probe") == "registry_uninstall"]
@@ -697,8 +747,15 @@ try:
           and _msj49.get("app_id") == _appid49
           and _msj49.get("app_id_source") == "setup_iss"
           and _msj49.get("script_path") == str(_iss49)
+          # 尺子修复（非判据削弱）：旧此处钉的是作者机观测——四视图「逐一 subkey_count>0」，
+          # 而干净 Windows runner 的 HKCU\...\Uninstall 合法为 0（本机曾装第三方应用故 HKCU=37）。
+          # 换成机器无关且**更强**的等式：服务端回报的每视图子键数 == 测试侧独立 winreg 现场枚举数
+          # （_zj_uninstall_count，与引擎同开窗口径）；再加一条四视图合计>0 的反桩地板——HKLM 在任何
+          # Windows 上都非空，故"枚举接缝被整体桩成恒空"必红，而 HKCU 诚实为 0 时 0==0 仍绿。
           and all(p.get("looking_for") == _msj49.get("derived_uninstall_key")
-                  and p.get("subkey_count", 0) > 0 for p in _reg49)
+                  and int(p.get("subkey_count", -1)) == _zj_uninstall_count(p.get("root"), p.get("view"))
+                  for p in _reg49)
+          and sum(_zj_uninstall_count(p.get("root"), p.get("view")) for p in _reg49) > 0
           and _msj49.get("installed") is any(p.get("present") for p in _reg49)
           # 本机真值（p49 探针实测 HKCU 37 / HKLM 201 子键零命中）：installed 必为 False。
           # 上一行钉的是"与探针恒等"这条可跨机迁移的不变式，本行钉的是本机观测——
@@ -721,11 +778,11 @@ try:
           and str(_r403p.json().get("detail", "")).startswith("路径被安全策略阻止")
           and _r403.status_code == 403
           and _r403.json().get("detail", {}).get("reason") == "manifest_path_outside_allowed_roots"
-          and str(_p49root / "outputs") in _r403.json()["detail"].get("allowed_roots", [])
+          and str(_ZJ_OUTBASE) in _r403.json()["detail"].get("allowed_roots", [])
           and _r403.json()["detail"].get("path") == str(_out49)
           and _r404.status_code == 404
           and _r404.json().get("detail") == "文件不存在: " + str(
-              _p49root / "outputs" / "p49_no_such_manifest.iss")
+              _ZJ_OUTBASE / "p49_no_such_manifest.iss")
           and _rh49.get("/api/v1/installer/manifest/verify", 0) > 0
           and _rh49.get("/api/v1/installer/state", 0) > 0
           and all(_m in _uijs.text for _m in ('"/installer/manifest/verify"', '"/installer/state"',
@@ -753,7 +810,7 @@ try:
     # 机器不变量纪律（本轮定律）：凡随构建漂移的量（产物字节/sha、载荷字节、磁盘余量、
     # 真实安装根）一律以**关系式**或**测试自己独立复算**钉，绝不钉字面毫秒/字面字节数——
     # 串行 --clean 重打包会改写 dist\ZaojingAI.exe 与 installer\*.exe，硬编码即假红。
-    _evp53 = _p49root / "outputs" / "installer" / "build-evidence.json"
+    _evp53 = _ZJ_OUTBASE / "installer" / "build-evidence.json"
     _art53 = requests.get(BASE + "/api/v1/installer/artifact", timeout=60).json()
     _art53x = requests.get(BASE + "/api/v1/installer/artifact", timeout=60,
                            params={"script_path": str(_iss49)}).json()
@@ -765,7 +822,7 @@ try:
     _sha = lambda b: _hl49.sha256(b).hexdigest()   # noqa: E731
     _src53 = [m.group(1) for m in _re49.finditer(r'(?m)^Source:\s*"([^"]+)"',
                                                  _iss49.read_text(encoding="utf-8"))]
-    _payload_bytes53 = sum((_p49root / "outputs" / s.replace("\\", "/")).stat().st_size
+    _payload_bytes53 = sum((_ZJ_OUTBASE / s.replace("\\", "/")).stat().st_size
                            for s in _src53)
     _pf53 = requests.get(BASE + "/api/v1/installer/preflight", timeout=60).json()
     _ck53 = _pf53.get("checks", {})
@@ -773,8 +830,8 @@ try:
     _root53 = _ck53.get("install_root", {})
     _cand53 = _root53.get("candidates", [])
     _priv53 = _ck53.get("privileges", {})
-    _sandbox53 = _p49root / "outputs" / "p53_l2_probe_dir"
-    _bad53 = _p49root / "outputs" / "installer" / "p53_l2_not_json_probe.json"
+    _sandbox53 = _ZJ_OUTBASE / "p53_l2_probe_dir"
+    _bad53 = _ZJ_OUTBASE / "installer" / "p53_l2_not_json_probe.json"
     _bad53.write_text("this is not json", encoding="utf-8")
     import shutil as _shu53
     _residual53 = None
@@ -938,7 +995,7 @@ try:
           and _pf403a.json().get("detail", {}).get("reason") == "preflight_override_outside_allowed_roots"
           and _pf403b.status_code == 403
           and _pf403b.json().get("detail", {}).get("path") == _pf53.get("installed_data_root")
-          and str(_p49root / "outputs") in _pf403a.json()["detail"].get("allowed_roots", [])
+          and str(_ZJ_OUTBASE) in _pf403a.json()["detail"].get("allowed_roots", [])
           and _pf400.status_code == 400
           and _pf400.json().get("detail", {}).get("reason") == "preflight_probe_param_invalid"
           and _pf400.json()["detail"].get("accepted") == ["true", "1", "yes", "on",
@@ -1506,7 +1563,7 @@ try:
         })
     _p69c_legs = {
         "population_3": len(_p69c_rows) == 3,
-        "types_3": all(_r["want_ct"] in _r["ct"] for _r in _p69c_rows),
+        "types_3": all(_zj_ct_ok(_r["want_ct"], _r["ct"]) for _r in _p69c_rows),
         "explicit_cc_3": all(_r["cc"] is not None for _r in _p69c_rows),
         "cc_no_cache_3": all("no-cache" in (_r["cc"] or "") for _r in _p69c_rows),
         "validators_3": all(_r["etag"] and _r["lm"] for _r in _p69c_rows),
@@ -1529,6 +1586,7 @@ try:
           all(_p69c_legs.values()) and len(_p69c_legs) == 11,
           f"red={_p69c_red} n={len(_p69c_rows)} "
           f"cc={[(_r['path'], _r['cc']) for _r in _p69c_rows]} "
+          f"ct={[(_r['path'], _r['want_ct'], _r['ct']) for _r in _p69c_rows]} "
           f"cond={[(_r['path'], _r['cond_status'], _r['cond_len']) for _r in _p69c_rows]} "
           f"ims={[_r['ims_status'] for _r in _p69c_rows]} "
           f"bogus={[(r['path'], r['bogus_status'], r['bogus_disk_eq']) for r in _p69c_rows]}")
@@ -2171,7 +2229,7 @@ try:
     _root43 = Path(__file__).resolve().parent
     _srcs43 = {"L2": _root43 / "test-full-functional.py",
                "L4": _root43 / "test-packaged-exe.py",
-               "L3": _root43 / "outputs" / "test-acceptance-real.py",
+               "L3": _ZJ_OUTBASE / "test-acceptance-real.py",
                # P51 第五层（血缘层）同样入尺：它的字面串既算声称，也在 L5 内被
                # route_hits 逐项真命中；本尺只额外承担"陈旧/幽灵字面串必红"这一路。
                "L5": _root43 / "test-lineage-chain.py",
@@ -4038,7 +4096,7 @@ try:
     # 丢掉尚未 flush 的 HANDSHAKE/EXEC 行，令下面那条"stdout 证明真执行"的判据永远落空
     # （本判据要证的是宿主脚本真的跑了，不是它愿不愿意 flush）。
     _cdr_proc = subprocess.Popen(
-        [sys.executable, "-u", str(Path(__file__).resolve().parent / "outputs" / "cdr_host.py"),
+        [sys.executable, "-u", str(_ZJ_OUTBASE / "cdr_host.py"),
          "--fake-backend", "--discovery", str(_cdr_disco), "--poll-timeout", "2"],
         stdout=_cdr_log, stderr=subprocess.STDOUT)
     _cdr_conn = None
@@ -4569,10 +4627,10 @@ try:
 
     _p57_here = Path(__file__).resolve().parent
     _p57_texts = {"note": (by_id.get("evaluation_center") or {}).get("note", "")}
-    for _nm57, _rel57 in (("readme-template", "outputs/build-installer.py"),
-                          ("安装说明.md", "outputs/安装说明.md"),
-                          ("portable/安装说明.md", "outputs/portable/docs/安装说明.md")):
-        _f57 = _p57_here / _rel57
+    for _nm57, _rel57 in (("readme-template", "build-installer.py"),
+                          ("安装说明.md", "安装说明.md"),
+                          ("portable/安装说明.md", "portable/docs/安装说明.md")):
+        _f57 = _ZJ_OUTBASE / _rel57
         if _f57.exists():
             _p57_texts[_nm57] = _f57.read_text(encoding="utf-8", errors="replace")
     _p57_cats = evj.get("categories", {}) or {}
@@ -4629,8 +4687,8 @@ try:
             if "QR" not in _tx57 or "Phase 57 起 QR 真值另 5 条" not in _tx57:
                 _p57_bad.append("%s 无 P57 QR 句" % _nm57)
     _p57_eng_reports = {}
-    for _rp57 in ("outputs/V1.0-功能完成度审计报告.md", "outputs/portable/docs/V1.0-功能完成度审计报告.md"):
-        _rf57 = _p57_here / _rp57
+    for _rp57 in ("V1.0-功能完成度审计报告.md", "portable/docs/V1.0-功能完成度审计报告.md"):
+        _rf57 = _ZJ_OUTBASE / _rp57
         if not _rf57.exists():
             _p57_bad.append("审计报告缺席 %s" % _rp57); continue
         _mt57 = _re57.search(r"当前为 \*{0,2}(\d+) 个引擎", _rf57.read_text(encoding="utf-8", errors="replace"))
@@ -4659,7 +4717,7 @@ try:
     # 缺席不得被读成绿；② 比较一律 read_bytes()，不用 read_text()（universal-newlines 会把母本
     # 的 LF 与随包的 CRLF 抹平成"看起来相等"，那正是本判据要抓的漂移形制之一）；③ 判据名不写
     # 快照字节数，尺寸只进 detail，改派生逻辑时不必回头改判据名。
-    _p61_dir = _p57_here / "outputs" / "portable" / "docs"
+    _p61_dir = _ZJ_OUTBASE / "portable" / "docs"
     _p61_ship = sorted(p.name for p in _p61_dir.iterdir() if p.is_file()) if _p61_dir.is_dir() else []
     _p61_bad = []
     if len(_p61_ship) < 2:
@@ -4667,7 +4725,7 @@ try:
                         % (len(_p61_ship), _p61_dir))
     _p61_sizes = {}
     for _n61 in _p61_ship:
-        _m61 = _p57_here / "outputs" / _n61
+        _m61 = _ZJ_OUTBASE / _n61
         _c61 = _p61_dir / _n61
         _p61_sizes[_n61] = [_c61.stat().st_size, _m61.stat().st_size if _m61.is_file() else None]
         if not _m61.is_file():
