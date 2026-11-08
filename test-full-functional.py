@@ -658,14 +658,19 @@ try:
     if not _txt49.exists():
         _txt49.write_text("p49_wiring_probe stdout fixture (path-only sentinel for suffix 400)\n",
                           encoding="utf-8")
-    _py49 = _ZJ_OUTBASE / "p49_wiring_probe.py"     # 源码后缀被共享路径策略先拦 → 403 负控
-    # CI 判红回归：干净 runner 无历史探针落盘，_py49 缺席 ⇒ validate_file_path 先 exists() 后
-    # suffix，退化为 404 而非 403，与本判据「源码后缀被共享策略先拦」的语义直接冲突（MEMORY
-    # 【validate_file_path 顺序陷阱】同源，_txt49 自建的同族修复）。自建 fixture 与 _txt49 一致：
-    # 内容与判据无关，只让路径存在且以 .py 结尾，供共享策略命中。
+    _py49 = _ZJ_OUTBASE / "p49_wiring_probe.tar.py"   # 源码后缀被共享路径策略先拦 → 403 负控
+    # CI Round 4 判红回归（仪器修复，判据未削弱）：旧 _py49 = "p49_wiring_probe.py" 在作者机
+    # 上恰好被 security_engine.EnhancedPathSecurityChecker._has_double_extension 拦成 403——
+    # 但那是路径字符串本身含点目录（工作区根 `.qoderworkcn`）让 split(".") 得到 ≥3 段的意外命中，
+    # 非该 fixture 名义上具备"源码后缀 + 危险双扩展"这层真实特征；CI runner 落在
+    # D:\a\zaojing-ai\zaojing-ai（无点目录），split 得 ["p49_wiring_probe", "py"]，双扩展判据
+    # 未开火 ⇒ validate_file_path 放行 ⇒ 撞端点自己的 suffix 门 ⇒ 400 而非 403。
+    # 修：fixture 文件名本身携带真双扩展（.tar.py），last segment 恰在危险后缀表里；任何机器上
+    # _has_double_extension 都会稳定命中 → 共享路径策略先拦成 403（字符串 detail），判据语义与
+    # 观测面完全一致，只是把仪器从"依赖作者工作区点目录"改到"依赖 fixture 自身可迁移特征"。
     if not _py49.exists():
-        _py49.write_text("# p49_wiring_probe .py path-only fixture "
-                         "(source-suffix 403 sentinel for shared path policy)\n",
+        _py49.write_text("# p49_wiring_probe .tar.py path-only fixture "
+                         "(double-ext source-code 403 sentinel for shared path policy)\n",
                          encoding="utf-8")
     _out49 = Path(str(tmp)) / "p49_outside_allowed_root.iss"
     # Phase 80 判卷侧涟漪（仪器缺陷伪装成产品结论，尺子修复、非产品改动、非新增 check 位）：
