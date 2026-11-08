@@ -1,7 +1,12 @@
 name: 验收 · L2/L4 Acceptance
 
-# 真跑真判：L2 源码级功能验收自起真实服务；L4 先构建冻结件再对便携 EXE 活体验收。
-# 两个脚本均以 sys.exit(1 if fails else 0) 收尾，任一 FAIL 即令该 job 变红——不伪造绿。
+# 真跑真判：一次构建 → L2/L4 两路验收各取所需。
+# build job 跑 build-installer.py 生成 dist/、portable/、installer/build-evidence.json、
+# build/ZaojingAI/EXE-00.toc 等中间件，以 actions/upload-artifact 交予下游两 job 下载复用。
+# 这样 L2 的 P49（setup.iss Source 存在性）与 P53（payload 字节求和对齐 build-evidence）
+# 拿到真值产物、L4 的 P50（tkinter/desktop_hub 是否在 TOC 里）拿到真 TOC，
+# 判据一律不削弱。两个 harness 都以 sys.exit(1 if fails else 0) 收尾，任一 FAIL 即令该
+# job 变红——不伪造绿。
 on:
   push:
     branches: [ main ]
@@ -16,12 +21,14 @@ concurrency:
 
 jobs:
   # ───────────────────────────────────────────────────────────
-  # L2：源码级功能验收（无需构建产物，起真实 uvicorn 服务打真 HTTP）
+  # 构建：真实跑一次 build-installer.py，把 dist/build/installer/portable 打成一份 artifact
+  # 交给 L2 和 L4 各自下载。构建自身的告警/优雅跳过的退出码不掩盖下游真实判定；
+  # 若产物缺席，下游会在对应 check 上如实 FAIL，CI 仍红——判据只认磁盘实物。
   # ───────────────────────────────────────────────────────────
-  l2-functional:
-    name: L2 · 源码级功能验收
+  build:
+    name: 构建 · PyInstaller 冻结 EXE + 便携包
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -30,10 +37,72 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: 安装依赖（含 PyInstaller、opencv、fontTools、Pillow）
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ci.txt
+
+      - name: 安装 Inno Setup 编译器（供安装版构建证据为真；缺失时构建脚本会优雅跳过）
+        continue-on-error: true
+        run: choco install innosetup --no-progress -y
+
+      - name: 构建冻结件（build-installer.py → dist/ZaojingAI.exe + build/ZaojingAI/*.toc + installer/build-evidence.json + 便携 ZIP + portable/）
+        shell: bash
+        continue-on-error: true
+        run: |
+          python build-installer.py | tee build-installer.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: 上传构建产物（dist + build + installer + portable + ZIP）
+        # if: always()：即便 build 步有告警退出也上传——下游对每个 check 判据自带缺件红
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-artifacts
+          path: |
+            dist/
+            build/
+            installer/
+            portable/
+            zaojing-ai-1.0.8-portable.zip
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 6
+
+      - name: 上传构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-installer.log
+          if-no-files-found: warn
+
+  # ───────────────────────────────────────────────────────────
+  # L2：源码级功能验收（自起真实 uvicorn 服务打真 HTTP；同时依赖 build/ 与 dist/ 的实物证据）
+  # ───────────────────────────────────────────────────────────
+  l2-functional:
+    name: L2 · 源码级功能验收
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 配置 Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-ci.txt
+
+      - name: 下载构建产物（dist/ + build/ + installer/ + portable/ + ZIP）
+        uses: actions/download-artifact@v4
+        with:
+          name: built-artifacts
+          path: .
 
       - name: 运行 L2（test-full-functional.py）
         shell: bash
@@ -50,10 +119,11 @@ jobs:
           if-no-files-found: warn
 
   # ───────────────────────────────────────────────────────────
-  # L4：冻结 EXE 活体验收（先真实构建 dist/ + 便携 ZIP + portable/，再逐端点验证）
+  # L4：冻结 EXE 活体验收（对 portable/ 与 build/ZaojingAI/EXE-00.toc 逐 check 判定）
   # ───────────────────────────────────────────────────────────
   l4-packaged:
     name: L4 · 冻结 EXE 验收
+    needs: build
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -64,23 +134,16 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: 安装依赖（含 PyInstaller、opencv）
+      - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-ci.txt
 
-      - name: 安装 Inno Setup 编译器（供安装版构建证据为真；缺失时构建脚本会优雅跳过）
-        continue-on-error: true
-        run: choco install innosetup --no-progress -y
-
-      - name: 构建冻结件（build-installer.py → dist/ZaojingAI.exe + 便携 ZIP + portable/）
-        shell: bash
-        # continue-on-error：构建自身的告警/优雅跳过的退出码不掩盖 L4 的真实判定；
-        # 若产物缺席，L4 会在对应 check 上如实 FAIL，CI 仍红——判据只认磁盘实物。
-        continue-on-error: true
-        run: |
-          python build-installer.py | tee build-installer.log
-          exit "${PIPESTATUS[0]}"
+      - name: 下载构建产物（dist/ + build/ + installer/ + portable/ + ZIP）
+        uses: actions/download-artifact@v4
+        with:
+          name: built-artifacts
+          path: .
 
       - name: 运行 L4（test-packaged-exe.py）
         shell: bash
@@ -88,17 +151,15 @@ jobs:
           python test-packaged-exe.py | tee l4-acceptance.log
           exit "${PIPESTATUS[0]}"
 
-      - name: 上传 L4 验收日志与构建日志
+      - name: 上传 L4 验收日志
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: l4-acceptance-log
-          path: |
-            l4-acceptance.log
-            build-installer.log
+          path: l4-acceptance.log
           if-no-files-found: warn
 
-      - name: 上传冻结产物（便携 ZIP）
+      - name: 上传冻结产物（便携 ZIP，供人肉下载）
         if: always()
         uses: actions/upload-artifact@v4
         with:
