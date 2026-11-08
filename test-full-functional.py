@@ -659,6 +659,14 @@ try:
         _txt49.write_text("p49_wiring_probe stdout fixture (path-only sentinel for suffix 400)\n",
                           encoding="utf-8")
     _py49 = _ZJ_OUTBASE / "p49_wiring_probe.py"     # 源码后缀被共享路径策略先拦 → 403 负控
+    # CI 判红回归：干净 runner 无历史探针落盘，_py49 缺席 ⇒ validate_file_path 先 exists() 后
+    # suffix，退化为 404 而非 403，与本判据「源码后缀被共享策略先拦」的语义直接冲突（MEMORY
+    # 【validate_file_path 顺序陷阱】同源，_txt49 自建的同族修复）。自建 fixture 与 _txt49 一致：
+    # 内容与判据无关，只让路径存在且以 .py 结尾，供共享策略命中。
+    if not _py49.exists():
+        _py49.write_text("# p49_wiring_probe .py path-only fixture "
+                         "(source-suffix 403 sentinel for shared path policy)\n",
+                         encoding="utf-8")
     _out49 = Path(str(tmp)) / "p49_outside_allowed_root.iss"
     # Phase 80 判卷侧涟漪（仪器缺陷伪装成产品结论，尺子修复、非产品改动、非新增 check 位）：
     # 服务端 installer manifest-verify 的每一条错误分支（含 manifest_path_outside_allowed_roots）
@@ -1961,7 +1969,11 @@ try:
     # 显示面用的必须是受服务副本（_p71_js == _uijs.text，P69 起逐代传递）：判据若读盘不读服务，
     # 服务与盘一旦分叉（L4 内嵌/缓存/挂载顺序），血统表判的就是上一代界面。
     _p71b_js = _p71_js
-    _p71b_js_disk = (OUT / "webui" / "app.js").read_text(encoding="utf-8")
+    # CI 判红回归：Path.read_text 走 universal newlines（CRLF→LF），而 requests 的 .text 保 CRLF；
+    # Windows runner 上 git checkout 若按 core.autocrlf 把 app.js 落为 CRLF，两口径即分叉——
+    # served_eq_disk=False 是「文本口径不匹配」的仪器假红，非产品分叉。P69c 已用 read_bytes 定口径，
+    # 本判据同步：把两侧都归到**字节口径**再解码，与服务实况同构。
+    _p71b_js_disk = (OUT / "webui" / "app.js").read_bytes().decode("utf-8")
     _p71b_legs, _p71b_info = _p71b_lineage(_p71b_js, _p71b_src, _re69)
     # 变异四臂（作用面必须先自证真实存在：锚点 / 处理器区域 / kv 落点 / 真值函数体逐环数得出再动手
     # ⇒ 桩打不中却被记成"无违规"是假绿；注入一律走 _p71b_inject，与 _display 共用同一份定位器）

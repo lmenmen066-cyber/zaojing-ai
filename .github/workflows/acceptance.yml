@@ -46,6 +46,26 @@ jobs:
         continue-on-error: true
         run: choco install innosetup --no-progress -y
 
+      - name: 补齐 Inno Setup 简体中文语言包（choco 发行版仅含官方内嵌语言）
+        # setup.iss [Languages] 声明 compiler:Languages\ChineseSimplified.isl——非本机自造路径，
+        # 是 Inno 官方社区译本的固定文件名。choco 的 innosetup 6.7.1 只内嵌 Default/Armenian/
+        # BrazilianPortuguese/Catalan/Corsican/German/Japanese 七枚 .isl，中文 .isl 属社区译本，
+        # 官方安装程序会附带、choco 打包不带。此处从 jrsoftware/issrc（Inno 官方源码仓库）拉取，
+        # 装到 ISCC 同级 Languages 目录，让 CI 环境与产品 setup.iss 声称的编译面一致。
+        # 拉不到即判红——不做静默跳过，避免"编译器在但语言缺失→iscc exit 2"的假绿。
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISL_DIR="/c/Program Files (x86)/Inno Setup 6/Languages"
+          if [ ! -d "$ISL_DIR" ]; then
+            echo "[ERROR] Inno Setup Languages 目录缺席：choco 未装成？$ISL_DIR"
+            exit 1
+          fi
+          curl -fsSL -o "$ISL_DIR/ChineseSimplified.isl" \
+            https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl
+          test -s "$ISL_DIR/ChineseSimplified.isl"
+          echo "[OK] ChineseSimplified.isl 就位：$(wc -c < "$ISL_DIR/ChineseSimplified.isl") 字节"
+
       - name: 构建冻结件（build-installer.py → dist/ZaojingAI.exe + build/ZaojingAI/*.toc + installer/build-evidence.json + 便携 ZIP + portable/）
         shell: bash
         continue-on-error: true
