@@ -73,8 +73,19 @@ jobs:
           python build-installer.py | tee build-installer.log
           exit "${PIPESTATUS[0]}"
 
-      - name: 上传构建产物（dist + build + installer + portable + ZIP）
+      - name: 上传构建产物（dist + build + installer + portable + ZIP + setup.iss）
         # if: always()：即便 build 步有告警退出也上传——下游对每个 check 判据自带缺件红
+        #
+        # 为什么 setup.iss 必须随附（P53 日期边界修复，判据只加强不削弱）：
+        # build-installer.py 每次构建都重生成 setup.iss，其 [Registry] 段把 InstallDate
+        # 打成 datetime.now()——即"构建当日"。build-evidence.json 记录的是**这份已编译脚本**
+        # 的 bytes/sha256。若只传证据不传脚本，L2/L4 下载后磁盘上仍是 checkout 出来的**上次
+        # 提交日**那份 setup.iss，其 sha 与证据所记必然不符 ⇒ installer_manifest 引擎如实判
+        # artifact_not_from_current_script（"产物并非由当前脚本产出"），一旦构建日≠setup.iss
+        # 最后提交日就假红。setup.iss 本就是"被编译的源码实物"，与 build-evidence.json 属同一
+        # 份证据链，缺席才是这套 build-artifact 架构的漏项。随附后 download-artifact 把它还原
+        # 到证据所记的同一绝对路径，测试用 hashlib 独立复算 _iss49 的 sha 与证据期望恒等——
+        # 校验面因此对"构建日/提交日"免疫，且判据语义只更严密（核的就是编译时那份字节）。
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -84,6 +95,7 @@ jobs:
             build/
             installer/
             portable/
+            setup.iss
             zaojing-ai-1.0.8-portable.zip
             zaojing-ai-1.0.8-portable.zip.sha256
           if-no-files-found: warn
