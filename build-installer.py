@@ -554,6 +554,10 @@ def create_portable_version():
     SHIPPED_DOCS = [
         "安装说明.md",
         "V1.0-功能完成度审计报告.md",
+        # 便携包完整性校验的静态指南（如何下载、如何 certutil/sha256sum/verify-portable.py 校验）。
+        # 刻意只写方法与"SHA 每轮变化"的说明，绝不在此写死某个具体 sha256——该文件本身在 ZIP 内，
+        # 若嵌自身校验值即自指悖论；真实校验值只活在 ZIP 外的 sidecar .sha256 与 build-evidence.json。
+        "下载与校验说明.md",
     ]
     # 清理便携包 docs 目录中上次构建遗留、且不在允许清单内的文档（防止作废的模拟数据随包分发）
     for stale in docs_dir.glob("*.md"):
@@ -645,8 +649,70 @@ def create_portable_version():
     print(f"   压缩包：{portable_zip}")
     print(f"   文件数：{file_count}")
     print(f"   文件大小：{file_size:.2f} MB")
-    
+
+    # 便携包完整性校验闭环：从磁盘实物重算 sha256（不是内存里拼的），产 sidecar .sha256 与
+    # build-evidence.json 的 portable 块。校验值只在 ZIP 之外留存——该 ZIP 无法自证自身哈希。
+    zip_bytes = portable_zip.read_bytes()
+    zip_sha256 = hashlib.sha256(zip_bytes).hexdigest()
+    zip_size = portable_zip.stat().st_size
+    with zipfile.ZipFile(portable_zip) as _zf_cnt:
+        zip_entries = len(_zf_cnt.namelist())
+    sidecar = portable_zip.parent / (portable_zip.name + ".sha256")
+    # sha256sum -c 兼容格式："<64位hash><两空格><纯文件名><LF>"。写 bytes 而非 text，
+    # 避开 Windows 文本模式把 \n 折成 \r\n 令 `sha256sum -c` 与 certutil 逐字节对不上。
+    sidecar.write_bytes(("%s  %s\n" % (zip_sha256, portable_zip.name)).encode("utf-8"))
+    print("[OK] 便携包校验件已写出：%s" % sidecar.name)
+    print("     sha256=%s…" % zip_sha256[:16])
+    _merge_portable_into_evidence({
+        "zip_name": portable_zip.name,
+        "sha256": zip_sha256,
+        "bytes": zip_size,
+        "entries": zip_entries,
+        "file_count": file_count,
+        "sidecar_name": sidecar.name,
+    })
+
     return True
+
+
+def _merge_portable_into_evidence(portable_info: dict) -> None:
+    """把便携 ZIP 的 sha256/字节数/条目数并入 installer/build-evidence.json。
+
+    该文件由 step5 的 Inno 编译步骤先写出（编译器未定位时也会写一份只含
+    iscc_output_tail=compiler_not_located 的最小件），便携包却在 step7 才生成，
+    故此处「读回既有 JSON、追加/覆盖 portable 块、原子重写」，绝不整份重建——
+    否则会抹掉 iscc/artifact/manifest 等既有编译证据字段。读回失败按空 dict 兜底，
+    保证便携校验块总能落盘，即便本轮没编出安装版。"""
+    try:
+        INSTALLER_DIR.mkdir(parents=True, exist_ok=True)
+        dest = INSTALLER_DIR / "build-evidence.json"
+        ev = {}
+        if dest.is_file():
+            try:
+                loaded = json.loads(dest.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    ev = loaded
+            except Exception:
+                ev = {}
+        ev["portable"] = {
+            "zip_name": portable_info["zip_name"],
+            "sha256": portable_info["sha256"],
+            "bytes": portable_info["bytes"],
+            "entries": portable_info["entries"],
+            "file_count": portable_info["file_count"],
+            "sidecar_name": portable_info["sidecar_name"],
+            # 如实声明 sidecar 的行文形制，供校验器与人都能据此复算，不让人猜两空格还是制表符
+            "sidecar_format": "sha256sum-compatible: '<sha256>  <zip_name>\\n' (两个空格分隔, LF 换行, 文件名不含路径)",
+            "note": "该 sha256 针对本次构建产出的 ZIP 实物；ZIP 内含目录时间戳故字节逐轮微变，"
+                    "校验值一律以本 sidecar 与 build-evidence.json 现值为准，文档不写死历史值。",
+        }
+        ev.setdefault("schema", "zaojing-installer-build/v1")
+        tmp = dest.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(ev, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, dest)
+        print("[OK] 便携包校验信息已并入 build-evidence.json：%s" % dest)
+    except Exception as exc:
+        print("[WARN] 便携包校验信息未能并入 build-evidence.json：%s（不谎报已并入）" % exc)
 
 def prepare_inno_setup_script():
     """生成 Inno Setup 脚本 setup.iss（模板见 INNO_SETUP_SCRIPT）。
@@ -955,10 +1021,27 @@ curl http://localhost:8000/api/v1/license
 
 - `ZaojingAI.exe` - 主程序，双击即可运行
 - `README.txt` - 便携版快速说明
-- `docs\\` - 随包文档（安装说明、功能完成度审计报告）
+- `docs\\` - 随包文档（安装说明、功能完成度审计报告、下载与校验说明）
 - `Data\\Assets\\` - 素材库（数据随程序保存在本地）
 - `Data\\Cache\\` - 缓存目录
 - `Data\\Logs\\` - 日志目录
+
+### 完整性校验（下载后请先做）
+
+每次构建都会在 ZIP **旁边**另存一份 `zaojing-ai-{VERSION}-portable.zip.sha256`（sha256sum 兼容文本：`<64 位十六进制><两个空格><纯文件名>`）。校验的是"你手上这份 zip 与构建产物逐字节一致"，用下面任一方式即可：
+
+```powershell
+# 方式 A：Windows 自带 certutil（与 sidecar 里的哈希串对比）
+certutil -hashfile zaojing-ai-{VERSION}-portable.zip SHA256
+
+# 方式 B：Git Bash / WSL 的 sha256sum，-c 直接吃 sidecar 文件
+sha256sum -c zaojing-ai-{VERSION}-portable.zip.sha256
+
+# 方式 C：随仓库提供的独立校验器（纯标准库，退出码 0=通过 / 1=不符或缺席）
+python verify-portable.py zaojing-ai-{VERSION}-portable.zip zaojing-ai-{VERSION}-portable.zip.sha256
+```
+
+诚实边界：本说明**不写死**当前 SHA-256。ZIP 里带目录时间戳，字节数与哈希每次构建都会微变，逐轮钉死一个具体值必然过期即误报（与 `installer\\build-evidence.json` 的既有纪律一致）。当前构建的真值只存在于两处实物：ZIP 外的 `.sha256` sidecar，与 `installer\\build-evidence.json` 的 `portable.sha256`。校验方法、下载位置与逐命令细节见随包 `下载与校验说明.md`。
 
 ### 安装版 vs 便携版对比
 
@@ -1154,6 +1237,7 @@ def main():
     # 列出本轮真实产出的文件（只列磁盘上实际存在者，未生成者如实说明，绝不指向不存在文件）
     exe_path = OUTPUT_DIR / f'{APP_NAME}.exe'
     zip_path = PORTABLE_DIR.parent / f'zaojing-ai-{VERSION}-portable.zip'
+    sidecar_path = zip_path.with_name(zip_path.name + '.sha256')
     setup_path = INSTALLER_DIR / f'zaojing-ai-{VERSION}-setup.exe'
     readme_path = SCRIPT_DIR / '安装说明.md'
     produced = []
@@ -1161,6 +1245,8 @@ def main():
         produced.append((exe_path, "独立可执行文件"))
     if zip_path.exists():
         produced.append((zip_path, "便携版本压缩包"))
+    if sidecar_path.exists():
+        produced.append((sidecar_path, "便携包 SHA-256 校验件（sha256sum 兼容，供下载后逐字节核对）"))
     if setup_path.exists():
         produced.append((setup_path, "Windows 安装包（标准版 · Inno Setup）"))
     if readme_path.exists():

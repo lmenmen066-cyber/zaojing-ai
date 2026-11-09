@@ -5,6 +5,7 @@ portable/
 installer/
 build/
 *.zip
+*.zip.sha256
 *.spec.local
 *.toc
 

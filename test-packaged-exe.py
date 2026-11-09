@@ -75,6 +75,116 @@ check("zip has docs/", any(n.startswith("docs/") for n in names), f"{sum(1 for n
 check("zip has Data dirs", any(n.startswith("Data/") for n in names), f"{sum(1 for n in names if n.startswith('Data/'))} entries")
 check("zip 安装说明 latest", "docs/安装说明.md" in names or "docs/\u5b89\u88c5\u8bf4\u660e.md" in names)
 
+# ---- 2b. 便携包下载/校验闭环（sha256 实物对账 + 等长篡改变异臂 + verify-portable.py 活体）----
+# 判的是"这枚交付 ZIP 能被逐字节独立复算、且校验器有判别力"，全部走盘上实物，不起服务：
+# sidecar(.sha256)、build-evidence.json 的 portable 块、以及仓库自带的 verify-portable.py 三者
+# 交叉对账。篡改臂用"等长单字节翻转"——长度不变，只有 sha256 能发现，正是完整性校验要防的形制。
+import hashlib as _hlz
+_SIDECAR = OUT / "zaojing-ai-1.0.8-portable.zip.sha256"
+_EV_ZIP = OUT / "installer" / "build-evidence.json"
+_VP = OUT / "verify-portable.py"
+_zpv_bad = []
+_zpv_info = {}
+try:
+    _zip_bytes = ZIP.read_bytes()
+    _zip_real = _hlz.sha256(_zip_bytes).hexdigest()
+    _zip_size = ZIP.stat().st_size
+    with zipfile.ZipFile(ZIP) as _zc:
+        _zip_entries = len(_zc.namelist())
+    _zpv_info["computed_sha256"] = _zip_real[:16]
+    _zpv_info["bytes"] = _zip_size
+    _zpv_info["entries"] = _zip_entries
+
+    # sidecar：sha256sum 兼容 '<64hex>  <name>'（两空格；兼容二进制 '<hex> *name'）
+    if not _SIDECAR.is_file():
+        _zpv_bad.append("sidecar 缺席: %s" % _SIDECAR.name)
+    else:
+        _sc_lines = [l for l in _SIDECAR.read_bytes().decode("utf-8", errors="replace").splitlines() if l.strip()]
+        if not _sc_lines:
+            _zpv_bad.append("sidecar 空")
+        else:
+            _l0 = _sc_lines[0]
+            _head = _l0[:64]
+            _rest = _l0[64:].lstrip()
+            if _rest.startswith("*"):
+                _rest = _rest[1:]
+            _sc_hash = _head.lower()
+            _sc_name = _rest.strip()
+            _zpv_info["sidecar_name"] = _sc_name
+            if any(c not in "0123456789abcdef" for c in _sc_hash):
+                _zpv_bad.append("sidecar 哈希形制非 64 位十六进制: %r" % _head)
+            if _sc_hash != _zip_real:
+                _zpv_bad.append("sidecar sha256 != 现场重算")
+            # 张冠李戴防护：sidecar 点名的文件必须就是这枚 ZIP
+            if Path(_sc_name).name != ZIP.name:
+                _zpv_bad.append("sidecar 点名 '%s' != ZIP '%s'" % (_sc_name, ZIP.name))
+            # sidecar 必须是纯 LF、以 \n 结尾（不被 Windows 文本模式折成 \r\n）
+            if _SIDECAR.read_bytes().count(b"\r") != 0:
+                _zpv_bad.append("sidecar 含 CR，非 LF-only")
+
+    # build-evidence.json 的 portable 块与盘上实物三值对账（sha256/bytes/entries）
+    if not _EV_ZIP.is_file():
+        _zpv_bad.append("build-evidence.json 缺席: %s" % _EV_ZIP)
+    else:
+        _evj = json.loads(_EV_ZIP.read_text(encoding="utf-8"))
+        _pv = _evj.get("portable") or {}
+        _zpv_info["ev_portable_keys"] = sorted(_pv.keys())
+        if _pv.get("sha256") != _zip_real:
+            _zpv_bad.append("evidence.portable.sha256 != 现场重算")
+        if _pv.get("bytes") != _zip_size:
+            _zpv_bad.append("evidence.portable.bytes=%s != 实测 %s" % (_pv.get("bytes"), _zip_size))
+        if _pv.get("entries") != _zip_entries:
+            _zpv_bad.append("evidence.portable.entries=%s != namelist %s" % (_pv.get("entries"), _zip_entries))
+        if _pv.get("zip_name") != ZIP.name:
+            _zpv_bad.append("evidence.portable.zip_name '%s' != ZIP '%s'" % (_pv.get("zip_name"), ZIP.name))
+
+    # 变异臂：等长单字节翻转 → 现场 sha256 必变（证明校验器对等长篡改有判别力，不是恒真）
+    _mut = _zip_bytes[:-1] + bytes([_zip_bytes[-1] ^ 0xFF])
+    if _mut != _zip_bytes:  # 防御：翻转后确实不同（几乎恒成立）
+        _mut_sha = _hlz.sha256(_mut).hexdigest()
+        _zpv_info["tampered_sha256"] = _mut_sha[:16]
+        if _mut_sha == _zip_real:
+            _zpv_bad.append("等长篡改后 sha256 未变（校验器无判别力）")
+    else:
+        _zpv_bad.append("篡改臂未能改动末字节")
+
+    # verify-portable.py 活体：原件必过(exit 0)，篡改副本对原 sidecar 必不过(exit!=0)
+    _tmpv = Path(tempfile.mkdtemp())
+    _tzip = _tmpv / ZIP.name  # 同名，令 sidecar 的名字门不触发，专测哈希比对分支
+    _tzip.write_bytes(_mut)
+    if not _VP.is_file():
+        _zpv_bad.append("verify-portable.py 缺席: %s" % _VP)
+    else:
+        _r_ok = subprocess.run([sys.executable, str(_VP), str(ZIP), str(_SIDECAR)],
+                               capture_output=True, text=True, timeout=120) if _SIDECAR.is_file() else None
+        _r_bad = subprocess.run([sys.executable, str(_VP), str(_tzip), str(_SIDECAR)],
+                                capture_output=True, text=True, timeout=120) if _SIDECAR.is_file() else None
+        if not _SIDECAR.is_file():
+            _zpv_bad.append("无法跑 verify-portable.py（sidecar 缺席）")
+        else:
+            _zpv_info["vp_real_rc"] = _r_ok.returncode
+            _zpv_info["vp_tampered_rc"] = _r_bad.returncode
+            if _r_ok.returncode != 0:
+                _zpv_bad.append("verify-portable.py 对原件未 exit0（rc=%s）" % _r_ok.returncode)
+            if _r_bad.returncode == 0:
+                _zpv_bad.append("verify-portable.py 对篡改副本竟 exit0（无判别力）")
+    try:
+        _tzip.unlink()
+        _tmpv.rmdir()
+    except Exception:
+        pass
+
+    check("EXE(P-zip-verify): portable zip download/verify closed loop is real and falsifiable - "
+          "sidecar .sha256 (LF-only, names THIS zip) == independently-recomputed sha256; "
+          "build-evidence.json portable.{sha256,bytes,entries,zip_name} all reconcile against the on-disk zip; "
+          "an equal-length single-byte tamper changes the hash (proves discrimination, not tautology); "
+          "verify-portable.py exits 0 on the real zip and non-zero on the tampered copy against the same sidecar",
+          _zpv_bad == [],
+          json.dumps({"bad": _zpv_bad[:10], "obs": _zpv_info}, ensure_ascii=False))
+except Exception as _zpv_exc:
+    check("EXE(P-zip-verify): portable zip download/verify closed loop is real and falsifiable",
+          False, "EXC: %r" % _zpv_exc)
+
 # ---- 3. bundled modules inside EXE (via runtime probe below) ----
 # run the portable EXE from the portable/ directory (has portable.flag)
 port_exe = PORT_DIR / "ZaojingAI.exe"
