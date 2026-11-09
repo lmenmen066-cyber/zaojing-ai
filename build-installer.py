@@ -1043,6 +1043,30 @@ python verify-portable.py zaojing-ai-{VERSION}-portable.zip zaojing-ai-{VERSION}
 
 诚实边界：本说明**不写死**当前 SHA-256。ZIP 里带目录时间戳，字节数与哈希每次构建都会微变，逐轮钉死一个具体值必然过期即误报（与 `installer\\build-evidence.json` 的既有纪律一致）。当前构建的真值只存在于两处实物：ZIP 外的 `.sha256` sidecar，与 `installer\\build-evidence.json` 的 `portable.sha256`。校验方法、下载位置与逐命令细节见随包 `下载与校验说明.md`。
 
+#### verify-portable.py 使用细则
+
+方式 C 里的 `verify-portable.py` 位于**仓库根目录**（`git clone` 后可见），刻意**未打进便携 ZIP**——把校验器塞进被验对象等于让它自证，判据失去独立性。三种典型调用：
+
+```bash
+# 1) 显式喂 sidecar（最常用）：sidecar 首行点名的文件必须与眼前 ZIP 同名
+python verify-portable.py <zip 路径> <sidecar .sha256 路径>
+
+# 2) 省略 sidecar：自动就近探测 installer/build-evidence.json 里的 portable.sha256
+#    探测顺序：<zip 同级>/installer → <zip 上级>/installer → <zip 同级>/
+python verify-portable.py zaojing-ai-{VERSION}-portable.zip
+
+# 3) ZIP 被搬到别处、目录结构不规整时，用 --evidence 显式指定证据文件
+python verify-portable.py <zip 路径> --evidence <build-evidence.json 路径>
+```
+
+判据与退出码（三值，任一不满足即非零，缺席绝不静默放过）：
+
+- `0` 通过——现场重算的 SHA-256 与真值来源逐字符等（64 位十六进制，大小写归一）；且当 sidecar 或 `build-evidence` 记录了文件名时，那个名字必须与被验 ZIP 的**文件名**一致（张冠李戴防护：拿 A 的校验值去混验 B 一律 exit 1）。
+- `1` 不符或缺席——ZIP 不存在/不是普通文件、sidecar 空文件或首行非法、真值哈希形制不合法（不是 64 位十六进制）、被验件哈希与期望不等、evidence 里 `portable.zip_name` 与被验件不同名……都归这一路。人类可读的 `[ERROR]`/`[FAIL]` 行会点名具体是哪一条不成立。
+- `2` 用法错误——argparse 层拦下的缺参/多参/未知开关，不会真去读盘。
+
+实现要点：SHA-256 用 **1 MB 分块**流式读入重算，不会为一份上百 MB 的 ZIP 撑爆内存；输出使用 `[OK]/[INFO]/[ERROR]/[FAIL]` 纯 ASCII 标记，`sys.stdout/stderr` 已用 `errors="backslashreplace"` 兜底，Windows GBK 控制台不会因中文段落抛 `UnicodeEncodeError`。想要看构建侧的具体哈希、字节数和文件条目数，直接读 `installer/build-evidence.json` 的 `portable` 块即可（含 `zip_name / sha256 / bytes / entries / file_count / sidecar_name`），这份证据由 `build-installer.py` 与 sidecar 同轮写出、由 L4 的 `P-zip-verify` 判据逐字段核验过。
+
 ### 安装版 vs 便携版对比
 
 - **安装版**：载荷落在 `{{autopf}}\\造境科技`（`{{autopf}}` 是 Inno 的 auto 常量，**不是单一真值**：per-user 缺省即 `%LOCALAPPDATA%\\Programs\\造境科技`，管理员模式才是 `%ProgramFiles%\\造境科技`），创建开始菜单项与卸载注册项，另按 [Registry] 写 `HKCU\\Software\\造境科技\\ZaojingAI` 的 Version / InstallLocation / InstallDate，并按 [Dirs] 预建 `%LOCALAPPDATA%\\Zaojing` 下的 Assets / Cache / Logs / config；运行时数据根就是 `%LOCALAPPDATA%\\Zaojing`（见 `config_persistence.WINDOWS_DATA_ROOT`）。
